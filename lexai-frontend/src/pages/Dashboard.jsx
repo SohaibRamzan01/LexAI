@@ -11,11 +11,11 @@ const CASES = [
 ]
 
 const STATUS_COLORS = {
-  active:  { dot: '#4CAF7A', tag: 'rgba(76,175,122,0.12)',  tagText: '#4CAF7A',  tagBorder: 'rgba(76,175,122,0.25)',  accent: '#4CAF7A' },
-  done:    { dot: '#C9A84C', tag: 'rgba(201,168,76,0.12)',  tagText: '#C9A84C',  tagBorder: 'rgba(201,168,76,0.25)',  accent: '#C9A84C' },
-  pending: { dot: '#7B9FD4', tag: 'rgba(123,159,212,0.12)', tagText: '#7B9FD4',  tagBorder: 'rgba(123,159,212,0.25)', accent: '#7B9FD4' },
-  urgent:  { dot: '#E07060', tag: 'rgba(224,112,96,0.12)',  tagText: '#E07060',  tagBorder: 'rgba(224,112,96,0.25)',  accent: '#E07060' },
-  closed:  { dot: '#4A4540', tag: 'rgba(74,69,64,0.3)',     tagText: '#6B6560',  tagBorder: 'rgba(74,69,64,0.4)',     accent: '#3A3530' },
+  active: { dot: '#4CAF7A', tag: 'rgba(76,175,122,0.12)', tagText: '#4CAF7A', tagBorder: 'rgba(76,175,122,0.25)', accent: '#4CAF7A' },
+  done: { dot: '#C9A84C', tag: 'rgba(201,168,76,0.12)', tagText: '#C9A84C', tagBorder: 'rgba(201,168,76,0.25)', accent: '#C9A84C' },
+  pending: { dot: '#7B9FD4', tag: 'rgba(123,159,212,0.12)', tagText: '#7B9FD4', tagBorder: 'rgba(123,159,212,0.25)', accent: '#7B9FD4' },
+  urgent: { dot: '#E07060', tag: 'rgba(224,112,96,0.12)', tagText: '#E07060', tagBorder: 'rgba(224,112,96,0.25)', accent: '#E07060' },
+  closed: { dot: '#4A4540', tag: 'rgba(74,69,64,0.3)', tagText: '#6B6560', tagBorder: 'rgba(74,69,64,0.4)', accent: '#3A3530' },
 }
 
 export default function Dashboard() {
@@ -44,7 +44,7 @@ export default function Dashboard() {
     if (!newCase.client || !newCase.section) return
     const created = {
       id: Date.now(),
-      code: `CR-2024-00${Math.floor(Math.random()*90+10)}`,
+      code: `CR-2024-00${Math.floor(Math.random() * 90 + 10)}`,
       client: newCase.client,
       section: newCase.section,
       type: newCase.type || 'General',
@@ -441,10 +441,10 @@ export default function Dashboard() {
           {/* STATS */}
           <div className="stats-grid">
             {[
-              { icon: '🗂', lbl: 'Total Cases',    val: cases.length,                                        sub: '↑ 3 this month' },
-              { icon: '⚡', lbl: 'Active',          val: cases.filter(c=>c.status==='active'||c.status==='urgent').length, sub: 'In progress' },
-              { icon: '✅', lbl: 'Research Done',  val: cases.filter(c=>c.status==='done').length,           sub: 'Completed' },
-              { icon: '🔴', lbl: 'Urgent',          val: cases.filter(c=>c.status==='urgent').length,        sub: 'Need attention' },
+              { icon: '🗂', lbl: 'Total Cases', val: cases.length, sub: '↑ 3 this month' },
+              { icon: '⚡', lbl: 'Active', val: cases.filter(c => c.status === 'active' || c.status === 'urgent').length, sub: 'In progress' },
+              { icon: '✅', lbl: 'Research Done', val: cases.filter(c => c.status === 'done').length, sub: 'Completed' },
+              { icon: '🔴', lbl: 'Urgent', val: cases.filter(c => c.status === 'urgent').length, sub: 'Need attention' },
             ].map((s, i) => (
               <div key={i} className="stat-card">
                 <span className="stat-card-icon">{s.icon}</span>
@@ -488,13 +488,21 @@ export default function Dashboard() {
                     <div className="case-card-date">{c.date}</div>
                   </div>
                   <div className="case-card-actions">
-                    <button className="card-action-btn primary" onClick={e => { e.stopPropagation(); navigate(`/case/${c.id}/chat`) }}>
-                      💬 Open Chat
+                    <button className="card-action-btn primary"
+                      onClick={e => { e.stopPropagation(); navigate(`/case/${c.id}/chat`) }}>
+                      Open Chat
                     </button>
-                    <button className="card-action-btn" onClick={e => { e.stopPropagation(); navigate(`/case/${c.id}/research`) }}>
+                    <button className="card-action-btn"
+                      onClick={e => { e.stopPropagation(); navigate(`/case/${c.id}/research`) }}>
                       📄 Research
                     </button>
-                    <button className="card-delete-btn" onClick={e => { e.stopPropagation(); setShowDeleteModal(c.id) }}>
+                    <button className="card-action-btn"
+                      onClick={e => { e.stopPropagation(); navigate(`/case/${c.id}/fees`) }}
+                      style={{ color: '#C9A84C', borderColor: 'rgba(201,168,76,0.25)', background: 'rgba(201,168,76,0.06)' }}>
+                      💰 Fees
+                    </button>
+                    <button className="card-delete-btn"
+                      onClick={e => { e.stopPropagation(); setShowDeleteModal(c.id) }}>
                       🗑
                     </button>
                   </div>
@@ -531,11 +539,11 @@ export default function Dashboard() {
             <div className="modal-title">Add New Case</div>
             <div className="modal-sub">Fill in the basic details. You can add more information in the chat.</div>
             <div className="modal-row">
-              <input className="modal-input" placeholder="Client Name *" value={newCase.client} onChange={e => setNewCase({...newCase, client: e.target.value})} />
-              <input className="modal-input" placeholder="Section (e.g. 302) *" value={newCase.section} onChange={e => setNewCase({...newCase, section: e.target.value})} />
+              <input className="modal-input" placeholder="Plantiff/Complainant Name" value={newCase.client} onChange={e => setNewCase({ ...newCase, client: e.target.value })} />
+              <input className="modal-input" placeholder="Section (e.g. 302) *" value={newCase.section} onChange={e => setNewCase({ ...newCase, section: e.target.value })} />
             </div>
-            <input className="modal-input" placeholder="Case Type (e.g. Murder, Fraud)" value={newCase.type} onChange={e => setNewCase({...newCase, type: e.target.value})} />
-            <input className="modal-input" placeholder="Court Name" value={newCase.court} onChange={e => setNewCase({...newCase, court: e.target.value})} />
+            <input className="modal-input" placeholder="Case Type (e.g. Murder, Fraud)" value={newCase.type} onChange={e => setNewCase({ ...newCase, type: e.target.value })} />
+            <input className="modal-input" placeholder="Court Name" value={newCase.court} onChange={e => setNewCase({ ...newCase, court: e.target.value })} />
             <div className="modal-actions">
               <button className="modal-btn cancel" onClick={() => setShowNewCase(false)}>Cancel</button>
               <button className="modal-btn confirm-add" onClick={handleAddCase}>＋ Create Case</button>
