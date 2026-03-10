@@ -52,6 +52,17 @@ export default function FeesMonitor() {
         setFees(await updateFees(id, updatedFees))
     }
 
+    const updatePaidDate = async (instId, newDate) => {
+        const updated = (fees.installments || []).map(i =>
+            (i._id === instId || i.id === instId)
+                ? { ...i, paidDate: newDate }
+                : i
+        )
+        const updatedFees = { ...fees, installments: updated }
+        setFees(updatedFees)
+        updateFees(id, updatedFees) // Intentionally not awaiting to avoid UI blocking while picking date
+    }
+
     const deleteInstall = async (instId) => {
         const updated = (fees.installments || []).filter(i => i._id !== instId && i.id !== instId)
         const updatedFees = { ...fees, installments: updated }
@@ -87,9 +98,17 @@ export default function FeesMonitor() {
 
     const currentCase = cases.find(c => String(c._id) === String(id)) || {}
 
-    const totalPaid = (fees.installments || []).filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0)
-    const totalPending = (fees.installments || []).filter(i => i.status === 'pending').reduce((s, i) => s + i.amount, 0)
-    const totalUpcoming = (fees.installments || []).filter(i => i.status === 'upcoming').reduce((s, i) => s + i.amount, 0)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const computedInstallments = (fees.installments || []).map(inst => {
+        if (inst.status !== 'paid' && inst.dueDate < todayStr) {
+            return { ...inst, status: 'pending' };
+        }
+        return inst;
+    });
+
+    const totalPaid = computedInstallments.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0)
+    const totalPending = computedInstallments.filter(i => i.status === 'pending').reduce((s, i) => s + i.amount, 0)
+    const totalUpcoming = computedInstallments.filter(i => i.status === 'upcoming').reduce((s, i) => s + i.amount, 0)
     const totalRemaining = Math.max(0, fees.totalAgreed - totalPaid)
     const paidPct = fees.totalAgreed ? Math.min(100, Math.round((totalPaid / fees.totalAgreed) * 100)) : 0
 
@@ -256,6 +275,8 @@ export default function FeesMonitor() {
         }
         .install-amount { font-weight: 700; font-family: 'DM Mono', monospace; color: #F5F0E8; font-size: 13px; }
         .install-date { font-size: 12px; color: #A09890; }
+        .date-edit-input { background: rgba(76,175,122,0.05); border: 1px solid rgba(76,175,122,0.3); color: #4CAF7A; border-radius: 4px; padding: 3px 5px; font-size: 11px; outline: none; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+        .date-edit-input::-webkit-calendar-picker-indicator { filter: invert(0.8) sepia(1) hue-rotate(80deg) saturate(3); cursor: pointer; }
         .install-note { font-size: 11px; color: #6B6560; font-style: italic; }
         .status-badge {
           display: inline-flex; align-items: center; gap: 4px;
@@ -409,9 +430,9 @@ export default function FeesMonitor() {
                     <div className="summary-grid">
                         {[
                             { icon: '💰', label: 'Total Agreed Fee', val: fmt(fees.totalAgreed), sub: 'Full retainer', color: '#C9A84C', accent: 'linear-gradient(90deg,#C9A84C,transparent)' },
-                            { icon: '✅', label: 'Total Received', val: fmt(totalPaid), sub: `${fees.installments.filter(i => i.status === 'paid').length} payments`, color: '#4CAF7A', accent: 'linear-gradient(90deg,#4CAF7A,transparent)' },
-                            { icon: '⏳', label: 'Pending / Due', val: fmt(totalPending), sub: `${fees.installments.filter(i => i.status === 'pending').length} overdue`, color: '#E07060', accent: 'linear-gradient(90deg,#E07060,transparent)' },
-                            { icon: '📅', label: 'Still Remaining', val: fmt(totalRemaining), sub: `${fees.installments.filter(i => i.status !== 'paid').length} installments left`, color: '#7B9FD4', accent: 'linear-gradient(90deg,#7B9FD4,transparent)' },
+                            { icon: '✅', label: 'Total Received', val: fmt(totalPaid), sub: `${computedInstallments.filter(i => i.status === 'paid').length} payments`, color: '#4CAF7A', accent: 'linear-gradient(90deg,#4CAF7A,transparent)' },
+                            { icon: '⏳', label: 'Pending / Due', val: fmt(totalPending), sub: `${computedInstallments.filter(i => i.status === 'pending').length} overdue`, color: '#E07060', accent: 'linear-gradient(90deg,#E07060,transparent)' },
+                            { icon: '📅', label: 'Still Remaining', val: fmt(totalRemaining), sub: `${computedInstallments.filter(i => i.status !== 'paid').length} installments left`, color: '#7B9FD4', accent: 'linear-gradient(90deg,#7B9FD4,transparent)' },
                         ].map((s, i) => (
                             <div key={i} className="summary-card" style={{ borderColor: `${s.color}25` }}>
                                 <div className="summary-card-accent" style={{ background: s.accent }} />
@@ -465,14 +486,25 @@ export default function FeesMonitor() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {(fees.installments || []).map((inst, idx) => {
+                                    {computedInstallments.map((inst, idx) => {
                                         const st = STATUS_STYLE[inst.status] || STATUS_STYLE.upcoming
                                         return (
                                             <tr key={inst._id || inst.id} className="install-row">
                                                 <td><div className="install-num">{String(idx + 1).padStart(2, '0')}</div></td>
                                                 <td><div className="install-amount">{fmt(inst.amount)}</div></td>
                                                 <td><div className="install-date">{inst.dueDate}</div></td>
-                                                <td><div className="install-date" style={{ color: inst.paidDate ? '#4CAF7A' : '#3A3530' }}>{inst.paidDate || '—'}</div></td>
+                                                <td>
+                                                    {inst.status === 'paid' ? (
+                                                        <input 
+                                                            type="date" 
+                                                            className="date-edit-input" 
+                                                            value={inst.paidDate || ''} 
+                                                            onChange={(e) => updatePaidDate(inst._id || inst.id, e.target.value)}
+                                                        />
+                                                    ) : (
+                                                        <div className="install-date" style={{ color: '#3A3530' }}>—</div>
+                                                    )}
+                                                </td>
                                                 <td><div className="install-note">{inst.note || '—'}</div></td>
                                                 <td>
                                                     <span className="status-badge" style={{ background: st.bg, borderColor: st.border, color: st.text }}>
@@ -500,7 +532,7 @@ export default function FeesMonitor() {
                                 <div className="section-title">Payment Timeline</div>
                             </div>
                             <div className="timeline">
-                                {Array.isArray(fees.installments) && fees.installments.length > 0 ? fees.installments.map((inst) => {
+                                {computedInstallments.length > 0 ? computedInstallments.map((inst) => {
                                     const st = STATUS_STYLE[inst.status] || STATUS_STYLE.upcoming
                                     return (
                                         <div key={inst._id || inst.id} className="tl-item">
