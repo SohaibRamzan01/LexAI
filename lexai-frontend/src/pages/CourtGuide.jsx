@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { getCases } from '../services/api'
 
 const GUIDE_DATA = {
   caseCode: 'CR-2024-0042',
@@ -133,13 +134,26 @@ export default function CourtGuide() {
   const [checklist, setChecklist]   = useState(GUIDE_DATA.checklist)
   const [expandedScript, setExpandedScript] = useState({})
   const [expandedTips,   setExpandedTips]   = useState({})
+  const [cases, setCases] = useState([])
+  const [currentCase, setCurrentCase] = useState({})
 
-  const SIDEBAR_CASES = [
-    { id: 1, client: 'Ahmad Raza', section: 'Sec. 302', status: 'active'  },
-    { id: 2, client: 'Bilal Khan', section: 'Sec. 420', status: 'done'    },
-    { id: 3, client: 'Sara Ali',   section: 'Custody',  status: 'pending' },
-    { id: 4, client: 'Tariq Butt', section: 'Bail App.',status: 'urgent'  },
-  ]
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getCases()
+        setCases(data)
+        const c = data.find(c => String(c._id) === String(id))
+        if(c) setCurrentCase(c)
+      } catch(err) {
+        console.error("Failed to load cases", err)
+      }
+    }
+    if (id) {
+      fetchData()
+    }
+  }, [id])
+
+  // removed static SIDEBAR_CASES
   const STATUS_DOT = { active: '#4CAF7A', done: '#C9A84C', pending: '#7B9FD4', urgent: '#E07060' }
 
   const toggleCheck = (itemId) => {
@@ -167,7 +181,7 @@ export default function CourtGuide() {
         hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
       </style>
       <h1>Courtroom Preparation Guide — ${GUIDE_DATA.hearingType}</h1>
-      <div class="meta">Client: ${GUIDE_DATA.client} · ${GUIDE_DATA.section} · ${GUIDE_DATA.court} · Generated: ${GUIDE_DATA.generatedAt}</div>
+      <div class="meta">Client: ${currentCase.clientName || GUIDE_DATA.client} · ${currentCase.section || GUIDE_DATA.section} · ${currentCase.court || GUIDE_DATA.court} · Generated: ${GUIDE_DATA.generatedAt}</div>
       ${printContent.innerHTML}
     `
     window.print()
@@ -495,13 +509,13 @@ export default function CourtGuide() {
         <button className="new-case-btn" onClick={() => navigate('/dashboard')}>＋ New Case</button>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <div className="sidebar-section-lbl">Cases</div>
-          {SIDEBAR_CASES.map(c => (
-            <div key={c.id}
-              className={`case-item ${String(c.id) === String(id) ? 'active' : ''}`}
-              onClick={() => navigate(`/case/${c.id}/guide`)}>
-              <div className="case-dot" style={{ background: STATUS_DOT[c.status] }} />
+          {cases.map(c => (
+            <div key={c._id}
+              className={`case-item ${String(c._id) === String(id) ? 'active' : ''}`}
+              onClick={() => navigate(`/case/${c._id}/guide`)}>
+              <div className="case-dot" style={{ background: STATUS_DOT[c.status] || STATUS_DOT.pending }} />
               <div>
-                <div className="case-item-title">{c.client} · {c.section}</div>
+                <div className="case-item-title">{c.clientName} · {c.section}</div>
                 <div className="case-item-meta">Court Guide</div>
               </div>
             </div>
@@ -509,9 +523,9 @@ export default function CourtGuide() {
         </div>
         <div className="sidebar-footer">
           <div className="user-chip">
-            <div className="user-avatar">AK</div>
+            <div className="user-avatar">{JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName?.[0] || 'A'}</div>
             <div>
-              <div className="user-name">Adv. Ali Khan</div>
+              <div className="user-name">Adv. {JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName || 'Lawyer'}</div>
               <div className="user-role">Senior Advocate</div>
             </div>
           </div>
@@ -525,7 +539,7 @@ export default function CourtGuide() {
         <div className="guide-topbar">
           <div>
             <div className="guide-title">Court Guide · <span>{GUIDE_DATA.hearingType}</span></div>
-            <div className="guide-meta">{GUIDE_DATA.client} · {GUIDE_DATA.section} · {GUIDE_DATA.court} · {GUIDE_DATA.generatedAt}</div>
+            <div className="guide-meta">{currentCase.clientName || GUIDE_DATA.client} · {currentCase.section || GUIDE_DATA.section} · {currentCase.court || GUIDE_DATA.court} · {GUIDE_DATA.generatedAt}</div>
           </div>
           <div className="topbar-actions">
             <button className="topbar-btn" onClick={() => navigate(`/case/${id}/chat`)}>💬 Chat</button>

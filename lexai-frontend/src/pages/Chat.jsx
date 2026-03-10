@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { sendMessage, getChatHistory } from '../services/api'
+import { sendMessage, getChatHistory, getCases } from '../services/api'
 
 const LANGUAGES = {
   english: {
@@ -23,12 +23,7 @@ const LANGUAGES = {
   },
 }
 
-const SIDEBAR_CASES = [
-  { id: 1, client: 'Ahmad Raza', section: 'Sec. 302', type: 'Murder',   status: 'active'  },
-  { id: 2, client: 'Bilal Khan', section: 'Sec. 420', type: 'Fraud',    status: 'done'    },
-  { id: 3, client: 'Sara Ali',   section: 'Custody',  type: 'Family',   status: 'pending' },
-  { id: 4, client: 'Tariq Butt', section: 'Bail App.',type: 'Criminal', status: 'urgent'  },
-]
+// removed static SIDEBAR_CASES
 const STATUS_DOT = { active: '#4CAF7A', done: '#C9A84C', pending: '#7B9FD4', urgent: '#E07060' }
 
 const QUICK_PROMPTS = {
@@ -75,6 +70,7 @@ export default function Chat() {
   const [chatHistory,   setChatHistory]   = useState([])
   const [feeDetected,   setFeeDetected]   = useState(null)
   const [feeDismissed,  setFeeDismissed]  = useState(false)
+  const [cases,         setCases]         = useState([])
 
   const messagesEndRef = useRef(null)
   const textareaRef    = useRef(null)
@@ -131,9 +127,24 @@ export default function Chat() {
         console.error("Failed to load chat history", err)
       }
     }
+
+    const loadCases = async () => {
+      try {
+        const data = await getCases()
+        setCases(data)
+        const currentCase = data.find(c => String(c._id) === String(id))
+        if (currentCase) {
+          setCaseTitle(currentCase.clientName || 'New Case')
+          setCaseSection(currentCase.section ? `Section ${currentCase.section}` : '')
+        }
+      } catch (error) {
+        console.error(error)
+      }
+    }
     
     if (id) {
       fetchHistory()
+      loadCases()
     }
   }, [id, language])
 
@@ -534,23 +545,23 @@ export default function Chat() {
         <button className="new-case-btn" onClick={() => navigate('/dashboard')}>＋ New Case</button>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <div className="sidebar-section-lbl">Cases</div>
-          {SIDEBAR_CASES.map(c => (
-            <div key={c.id}
-              className={`case-item ${String(c.id) === String(id) ? 'active' : ''}`}
-              onClick={() => navigate(`/case/${c.id}/chat`)}>
-              <div className="case-dot" style={{ background: STATUS_DOT[c.status] }} />
+          {cases.map(c => (
+            <div key={c._id}
+              className={`case-item ${String(c._id) === String(id) ? 'active' : ''}`}
+              onClick={() => navigate(`/case/${c._id}/chat`)}>
+              <div className="case-dot" style={{ background: STATUS_DOT[c.status] || STATUS_DOT.pending }} />
               <div>
-                <div className="case-item-title">{c.client} · {c.section}</div>
-                <div className="case-item-meta">{c.type}</div>
+                <div className="case-item-title">{c.clientName} · {c.section}</div>
+                <div className="case-item-meta">{c.caseType}</div>
               </div>
             </div>
           ))}
         </div>
         <div className="sidebar-footer">
           <div className="user-chip">
-            <div className="user-avatar">AK</div>
+            <div className="user-avatar">{JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName?.[0] || 'A'}</div>
             <div>
-              <div className="user-name">Adv. Ali Khan</div>
+              <div className="user-name">Adv. {JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName || 'Lawyer'}</div>
               <div className="user-role">Senior Advocate</div>
             </div>
           </div>

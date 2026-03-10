@@ -11,7 +11,7 @@ router.use(protect);
 const verifyCaseOwnership = async (caseId, userId) => {
     const caseItem = await Case.findOne({ _id: caseId, lawyer: userId });
     if (!caseItem) {
-        throw new Error("Case not found or unauthorized to access this case");
+        throw new Error("Case not found");
     }
     return caseItem;
 };

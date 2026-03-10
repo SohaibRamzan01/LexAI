@@ -12,7 +12,7 @@ const STATUS_COLORS = {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [activeCase, setActiveCase] = useState(1)
+  const [activeCase, setActiveCase] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showDeleteModal, setShowDeleteModal] = useState(null)
   const [cases, setCases] = useState([])
@@ -27,6 +27,13 @@ export default function Dashboard() {
     setLoading(true)
     try {
       const data = await getCases()
+      if (data && data.message && data.message.includes('Not authorized')) {
+         localStorage.removeItem('lexai_token');
+         localStorage.removeItem('lexai_user');
+         navigate('/auth');
+         return;
+      }
+      
       if (Array.isArray(data)) {
         const formattedCases = data.map(c => ({
           id: c._id,
@@ -446,9 +453,9 @@ export default function Dashboard() {
 
             <div className="sidebar-footer">
               <div className="user-chip">
-                <div className="user-avatar">AK</div>
+                <div className="user-avatar">{JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName?.[0] || 'A'}</div>
                 <div>
-                  <div className="user-name">Adv. Ali Khan</div>
+                  <div className="user-name">Adv. {JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName || 'Lawyer'}</div>
                   <div className="user-role">Senior Advocate</div>
                 </div>
               </div>
@@ -476,7 +483,7 @@ export default function Dashboard() {
               />
             </div>
             <button className="topbar-btn">📊 Reports</button>
-            <button className="topbar-btn" onClick={() => { localStorage.removeItem("lexai_token"); navigate('/auth'); }}>⬚ Sign Out</button>
+            <button className="topbar-btn" onClick={() => { localStorage.removeItem("lexai_token"); localStorage.removeItem("lexai_user"); navigate('/auth'); }}>⬚ Sign Out</button>
           </div>
         </div>
 
@@ -485,8 +492,8 @@ export default function Dashboard() {
           {/* STATS */}
           <div className="stats-grid">
             {[
-              { icon: '🗂', lbl: 'Total Cases', val: cases.length, sub: '↑ 3 this month' },
-              { icon: '⚡', lbl: 'Active', val: cases.filter(c => c.status === 'active' || c.status === 'urgent').length, sub: 'In progress' },
+              { icon: '🗂', lbl: 'Total Cases', val: cases.length, sub: 'All cases' },
+              { icon: '⚡', lbl: 'Active', val: cases.filter(c => ['active', 'urgent', 'pending'].includes(c.status)).length, sub: 'In progress' },
               { icon: '✅', lbl: 'Research Done', val: cases.filter(c => c.status === 'done').length, sub: 'Completed' },
               { icon: '🔴', lbl: 'Urgent', val: cases.filter(c => c.status === 'urgent').length, sub: 'Need attention' },
             ].map((s, i) => (

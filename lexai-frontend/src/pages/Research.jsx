@@ -21,6 +21,7 @@ export default function Research() {
   const [researchData, setResearchData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const contentRef = useRef(null)
 
   const loadData = async () => {
     setLoading(true)
