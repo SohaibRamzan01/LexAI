@@ -3,7 +3,7 @@ const router = express.Router();
 const Case = require("../models/Case");
 const Message = require("../models/Message");
 const { protect } = require("../middleware/authMiddleware");
-const { getGeminiChatModel } = require("../utils/geminiClient");
+const { getGeminiChatModel, sendLegalQuery } = require("../utils/geminiClient");
 
 router.use(protect);
 
@@ -20,71 +20,37 @@ router.post("/:caseId", async (req, res) => {
 
     try {
         // 1. Verify case exists and belongs to the user
-        const caseItem = await Case.findById(caseId);
+        const caseItem = await Case.findOne({ _id: caseId, lawyer: req.user._id });
         if (!caseItem) {
-            return res.status(404).json({ message: "Case not found" });
-        }
-        if (caseItem.lawyer.toString() !== req.user._id.toString()) {
-            return res.status(401).json({ message: "Not authorized to access this case" });
+            return res.status(404).json({ message: "Case not found or unauthorized to access this case" });
         }
 
         // 2. Fetch all previous messages to rebuild the chat history context
         const previousMessages = await Message.find({ case: caseId }).sort({ timestamp: 1 });
 
         // 3. Format previous messages into Gemini's multi-turn History format
-        // Gemini expects: { role: "user" | "model", parts: [{ text: "..." }] }
-        // Mongoose Model uses role = "user" | "ai". So we map "ai" -> "model"
         const history = previousMessages.map((msg) => ({
-            role: msg.role === "user" ? "user" : "model",
+            role: msg.role === "ai" ? "model" : "user",
             parts: [{ text: msg.text }],
         }));
 
-        // 4. Construct the System Prompt for a Pakistani Legal Chatbot
-        // This primes the AI to act uniquely every time a session is initialized
-        let systemInstruction = `You are LexAI, an expert AI legal assistant specifically trained in the laws and constitution of Pakistan. 
-You are assisting a Pakistani lawyer representing a client. 
-Case Details Context: Target case concerns ${caseItem.title} - ${caseItem.caseType} - Section ${caseItem.section}. 
-Your goal is to provide legally sound, precise, and strategic advice referencing Pakistani statutes, IPC/PPC equivalents (Pakistan Penal Code), Criminal Procedure Code (CrPC), and Pakistani constitutional rights where applicable.`;
+        // 4. Send the query
+        const aiResponseText = await sendLegalQuery(history, language, text);
 
-        // Handle languages explicitly
-        if (language.toLowerCase() === "urdu") {
-            systemInstruction += " Please respond entirely in proper written Urdu script.";
-        } else if (language.toLowerCase() === "roman") {
-            systemInstruction += " Please respond entirely in Roman Urdu (Urdu written in English script).";
-        } else {
-            systemInstruction += " Please respond entirely in proper English.";
-        }
-
-        // 5. Initialize Gemini Chat Session with History + System Instruction
-        const model = getGeminiChatModel();
-        const chatSession = model.startChat({
-            history: history,
-            systemInstruction: {
-                role: "system",
-                parts: [{ text: systemInstruction }]
-            }
-        });
-
-        // 6. Send user's new message to Gemini
-        const result = await chatSession.sendMessage(text);
-        const aiResponseText = result.response.text();
-
-        // 7. Save BOTH the User's message and the AI's response to your Database
-        const userMsg = new Message({
+        // 5. Save BOTH the User's message and the AI's response to your Database
+        const userMsg = await Message.create({
             case: caseId,
             role: "user",
             text: text,
             language: language,
         });
-        await userMsg.save();
 
-        const aiMsg = new Message({
+        const aiMsg = await Message.create({
             case: caseId,
             role: "ai",
             text: aiResponseText,
             language: language,
         });
-        await aiMsg.save();
 
         // 8. Return the AI's response to frontend
         res.status(201).json({
@@ -105,12 +71,9 @@ router.get("/:caseId", async (req, res) => {
 
     try {
         // 1. Verify case exists and belongs to the user
-        const caseItem = await Case.findById(caseId);
+        const caseItem = await Case.findOne({ _id: caseId, lawyer: req.user._id });
         if (!caseItem) {
-            return res.status(404).json({ message: "Case not found" });
-        }
-        if (caseItem.lawyer.toString() !== req.user._id.toString()) {
-            return res.status(401).json({ message: "Not authorized to access this case" });
+            return res.status(404).json({ message: "Case not found or unauthorized to access this case" });
         }
 
         // 2. Fetch messages
@@ -129,12 +92,9 @@ router.delete("/:caseId", async (req, res) => {
 
     try {
         // 1. Verify case exists and belongs to the user
-        const caseItem = await Case.findById(caseId);
+        const caseItem = await Case.findOne({ _id: caseId, lawyer: req.user._id });
         if (!caseItem) {
-            return res.status(404).json({ message: "Case not found" });
-        }
-        if (caseItem.lawyer.toString() !== req.user._id.toString()) {
-            return res.status(401).json({ message: "Not authorized to modify this case" });
+            return res.status(404).json({ message: "Case not found or unauthorized to access this case" });
         }
 
         // 2. Erase messages

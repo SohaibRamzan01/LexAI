@@ -1,24 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { getCases, getFees, updateFees } from '../services/api'
 
-const INITIAL_FEES = {
-    totalAgreed: 250000,
-    currency: 'PKR',
-    notes: 'Full fee agreed at first consultation. Client requested installment plan.',
-    installments: [
-        { id: 1, amount: 80000, dueDate: '2024-01-15', paidDate: '2024-01-15', status: 'paid', note: 'Initial retainer' },
-        { id: 2, amount: 80000, dueDate: '2024-02-15', paidDate: '2024-02-18', status: 'paid', note: 'Second installment' },
-        { id: 3, amount: 60000, dueDate: '2024-03-15', paidDate: null, status: 'pending', note: 'Third installment' },
-        { id: 4, amount: 30000, dueDate: '2024-04-15', paidDate: null, status: 'upcoming', note: 'Final payment' },
-    ],
-}
-
-const SIDEBAR_CASES = [
-    { id: 1, client: 'Ahmad Raza', section: 'Sec. 302', status: 'active' },
-    { id: 2, client: 'Bilal Khan', section: 'Sec. 420', status: 'done' },
-    { id: 3, client: 'Sara Ali', section: 'Custody', status: 'pending' },
-    { id: 4, client: 'Tariq Butt', section: 'Bail App.', status: 'urgent' },
-]
 const STATUS_DOT = { active: '#4CAF7A', done: '#C9A84C', pending: '#7B9FD4', urgent: '#E07060' }
 
 const fmt = (n) => 'Rs. ' + Number(n).toLocaleString('en-PK')
@@ -27,55 +10,88 @@ export default function FeesMonitor() {
     const navigate = useNavigate()
     const { id } = useParams()
 
-    const [fees, setFees] = useState(INITIAL_FEES)
-    const [showAddPayment, setShowAddPayment] = useState(false)
+    const [cases, setCases] = useState([])
+    const [fees, setFees] = useState(null)
+    const [loading, setLoading] = useState(true)
+
     const [showEditTotal, setShowEditTotal] = useState(false)
     const [showAddInstall, setShowAddInstall] = useState(false)
-    const [editingId, setEditingId] = useState(null)
 
-    const [payForm, setPayForm] = useState({ installmentId: '', paidDate: '', note: '' })
     const [newInstall, setNewInstall] = useState({ amount: '', dueDate: '', note: '' })
-    const [newTotal, setNewTotal] = useState(fees.totalAgreed)
+    const [newTotal, setNewTotal] = useState(0)
 
-    const totalPaid = fees.installments.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0)
-    const totalPending = fees.installments.filter(i => i.status === 'pending').reduce((s, i) => s + i.amount, 0)
-    const totalUpcoming = fees.installments.filter(i => i.status === 'upcoming').reduce((s, i) => s + i.amount, 0)
-    const totalRemaining = fees.totalAgreed - totalPaid
-    const paidPct = Math.round((totalPaid / fees.totalAgreed) * 100)
+    useEffect(() => {
+        const loadContext = async () => {
+            setLoading(true)
+            try {
+                const casesData = await getCases()
+                setCases(casesData)
 
-    const markPaid = (instId) => {
-        setFees(prev => ({
-            ...prev,
-            installments: prev.installments.map(i =>
-                i.id === instId
-                    ? { ...i, status: 'paid', paidDate: new Date().toISOString().split('T')[0] }
-                    : i
-            ),
-        }))
+                if (id) {
+                    const feesData = await getFees(id)
+                    setFees(feesData)
+                    setNewTotal(feesData.totalAgreed || 0)
+                }
+            } catch (err) {
+                console.error("Failed to load fees data:", err)
+            } finally {
+                setLoading(false)
+            }
+        }
+        loadContext()
+    }, [id])
+
+    const markPaid = async (instId) => {
+        const updated = (fees.installments || []).map(i =>
+            (i._id === instId || i.id === instId)
+                ? { ...i, status: 'paid', paidDate: new Date().toISOString().split('T')[0] }
+                : i
+        )
+        const updatedFees = { ...fees, installments: updated }
+        setFees(updatedFees)
+        setFees(await updateFees(id, updatedFees))
     }
 
-    const deleteInstall = (instId) => {
-        setFees(prev => ({ ...prev, installments: prev.installments.filter(i => i.id !== instId) }))
+    const deleteInstall = async (instId) => {
+        const updated = (fees.installments || []).filter(i => i._id !== instId && i.id !== instId)
+        const updatedFees = { ...fees, installments: updated }
+        setFees(updatedFees)
+        setFees(await updateFees(id, updatedFees))
     }
 
-    const handleAddInstall = () => {
+    const handleAddInstall = async () => {
         if (!newInstall.amount || !newInstall.dueDate) return
-        setFees(prev => ({
-            ...prev,
-            installments: [...prev.installments, {
-                id: Date.now(), amount: Number(newInstall.amount),
-                dueDate: newInstall.dueDate, paidDate: null,
-                status: 'upcoming', note: newInstall.note,
-            }],
-        }))
+        const newInst = {
+            id: Date.now(),
+            amount: Number(newInstall.amount),
+            dueDate: newInstall.dueDate, 
+            paidDate: null,
+            status: 'upcoming', 
+            note: newInstall.note,
+        }
+        const updatedFees = { ...fees, installments: [...(fees.installments || []), newInst] }
+        setFees(updatedFees)
         setNewInstall({ amount: '', dueDate: '', note: '' })
         setShowAddInstall(false)
+        setFees(await updateFees(id, updatedFees))
     }
 
-    const handleUpdateTotal = () => {
-        setFees(prev => ({ ...prev, totalAgreed: Number(newTotal) }))
+    const handleUpdateTotal = async () => {
+        const updatedFees = { ...fees, totalAgreed: Number(newTotal) }
+        setFees(updatedFees)
         setShowEditTotal(false)
+        setFees(await updateFees(id, updatedFees))
     }
+
+    if (loading || !fees) return <div style={{ background: '#0A0908', color: '#F5F0E8', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '18px', fontFamily: "'DM Sans', sans-serif" }}><div style={{ fontSize: '24px', marginRight: '12px', animation: 'spin 1s linear infinite' }}>⏳</div><style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>Loading fee agreements...</div>
+
+    const currentCase = cases.find(c => String(c._id) === String(id)) || {}
+
+    const totalPaid = (fees.installments || []).filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0)
+    const totalPending = (fees.installments || []).filter(i => i.status === 'pending').reduce((s, i) => s + i.amount, 0)
+    const totalUpcoming = (fees.installments || []).filter(i => i.status === 'upcoming').reduce((s, i) => s + i.amount, 0)
+    const totalRemaining = Math.max(0, fees.totalAgreed - totalPaid)
+    const paidPct = fees.totalAgreed ? Math.min(100, Math.round((totalPaid / fees.totalAgreed) * 100)) : 0
 
     const STATUS_STYLE = {
         paid: { bg: 'rgba(76,175,122,0.12)', border: 'rgba(76,175,122,0.25)', text: '#4CAF7A', label: '✓ Paid' },
@@ -336,23 +352,23 @@ export default function FeesMonitor() {
                 <button className="new-case-btn" onClick={() => navigate('/dashboard')}>＋ New Case</button>
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                     <div className="sidebar-section-lbl">Cases</div>
-                    {SIDEBAR_CASES.map(c => (
-                        <div key={c.id}
-                            className={`case-item ${String(c.id) === String(id) ? 'active' : ''}`}
-                            onClick={() => navigate(`/case/${c.id}/fees`)}>
-                            <div className="case-dot" style={{ background: STATUS_DOT[c.status] }} />
+                    {cases.map(c => (
+                        <div key={c._id}
+                            className={`case-item ${String(c._id) === String(id) ? 'active' : ''}`}
+                            onClick={() => navigate(`/case/${c._id}/fees`)}>
+                            <div className="case-dot" style={{ background: STATUS_DOT[c.status] || STATUS_DOT.pending }} />
                             <div>
-                                <div className="case-item-title">{c.client} · {c.section}</div>
+                                <div className="case-item-title">{c.clientName} · {c.section}</div>
                                 <div className="case-item-meta">Fees Monitor</div>
                             </div>
                         </div>
                     ))}
                 </div>
                 <div className="sidebar-footer">
-                    <div className="user-chip">
-                        <div className="user-avatar">AK</div>
+                    <div className="user-chip" onClick={() => navigate('/dashboard')}>
+                        <div className="user-avatar">{JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName?.[0] || 'A'}</div>
                         <div>
-                            <div className="user-name">Adv. Ali Khan</div>
+                            <div className="user-name">Adv. {JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName || 'Lawyer'}</div>
                             <div className="user-role">Senior Advocate</div>
                         </div>
                     </div>
@@ -365,8 +381,8 @@ export default function FeesMonitor() {
                 {/* TOPBAR */}
                 <div className="fees-topbar">
                     <div>
-                        <div className="fees-title">Fees Monitor · <span>Ahmad Raza</span></div>
-                        <div className="fees-meta">CR-2024-{id || '0042'} · Section 302 · Lahore Sessions Court</div>
+                        <div className="fees-title">Fees Monitor · <span>{currentCase.clientName || 'Loading...'}</span></div>
+                        <div className="fees-meta">{currentCase.caseCode || ''} · {currentCase.section || ''} · {currentCase.court || ''}</div>
                     </div>
                     <div className="topbar-actions">
                         <button className="topbar-btn" onClick={() => navigate(`/case/${id}/chat`)}>💬 Chat</button>
@@ -449,10 +465,10 @@ export default function FeesMonitor() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {fees.installments.map((inst, idx) => {
-                                        const st = STATUS_STYLE[inst.status]
+                                    {(fees.installments || []).map((inst, idx) => {
+                                        const st = STATUS_STYLE[inst.status] || STATUS_STYLE.upcoming
                                         return (
-                                            <tr key={inst.id} className="install-row">
+                                            <tr key={inst._id || inst.id} className="install-row">
                                                 <td><div className="install-num">{String(idx + 1).padStart(2, '0')}</div></td>
                                                 <td><div className="install-amount">{fmt(inst.amount)}</div></td>
                                                 <td><div className="install-date">{inst.dueDate}</div></td>
@@ -466,9 +482,9 @@ export default function FeesMonitor() {
                                                 <td>
                                                     <div className="install-actions">
                                                         {inst.status !== 'paid' && (
-                                                            <button className="inst-btn pay" onClick={() => markPaid(inst.id)}>Mark Paid</button>
+                                                            <button className="inst-btn pay" onClick={() => markPaid(inst._id || inst.id)}>Mark Paid</button>
                                                         )}
-                                                        <button className="inst-btn del" onClick={() => deleteInstall(inst.id)}>✕</button>
+                                                        <button className="inst-btn del" onClick={() => deleteInstall(inst._id || inst.id)}>✕</button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -484,10 +500,10 @@ export default function FeesMonitor() {
                                 <div className="section-title">Payment Timeline</div>
                             </div>
                             <div className="timeline">
-                                {fees.installments.map((inst) => {
-                                    const st = STATUS_STYLE[inst.status]
+                                {Array.isArray(fees.installments) && fees.installments.length > 0 ? fees.installments.map((inst) => {
+                                    const st = STATUS_STYLE[inst.status] || STATUS_STYLE.upcoming
                                     return (
-                                        <div key={inst.id} className="tl-item">
+                                        <div key={inst._id || inst.id} className="tl-item">
                                             <div className="tl-dot" style={{ borderColor: st.text, background: inst.status === 'paid' ? st.text : '#0A0908' }} />
                                             <div className="tl-content">
                                                 <div className="tl-top">
@@ -502,7 +518,9 @@ export default function FeesMonitor() {
                                             </div>
                                         </div>
                                     )
-                                })}
+                                }) : (
+                                    <div style={{ color: '#6B6560', fontSize: 13, fontStyle: 'italic', marginTop: 10 }}>No installments tracked yet. Add one above.</div>
+                                )}
                             </div>
                         </div>
                     </div>

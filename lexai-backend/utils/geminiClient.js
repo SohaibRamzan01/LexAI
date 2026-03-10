@@ -4,17 +4,66 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
-    console.error("Missing GEMINI_API_KEY environment variable. AI won't work!");
+    console.warn("⚠️ Missing GEMINI_API_KEY environment variable. AI won't work!");
 }
 
-// Initialize the Gemini client
+// 1. Initialize the Gemini client
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// We'll use the recommended `gemini-2.5-flash` model for chat apps
+// Helper used by other backward-compatible routes (e.g., research)
 const getGeminiChatModel = () => {
     return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 };
 
+const buildSystemPrompt = (language) => {
+    const langRule = {
+        english: "Respond ONLY in formal English.",
+        urdu:    "Sirf Urdu mein jawab dein — Urdu script mein.",
+        roman:   "SIRF Roman Urdu mein jawab dein (English haroof, Urdu bolain).",
+    };
+    return `You are LexAI — expert AI legal co-worker for Pakistani lawyers.
+    LANGUAGE: ${langRule[language] || langRule.english}
+    EXPERTISE: PPC, CrPC, Constitution of Pakistan 1973, MFLO,
+    Qanun-e-Shahadat, ATA, NAO, and all superior court precedents.
+    BEHAVIOR:
+    1. First ask 3-5 clarifying questions to gather full case context.
+    2. Then provide: APPLICABLE LAW, BAIL GROUNDS, KEY PRECEDENTS,
+       DEFENSE STRATEGY, and COURT SCRIPT.
+    3. Always cite real Pakistani cases (e.g. 2019 SCMR 142).
+    4. Always mention relevant constitutional articles.
+    FOCUS: Bail strategy, court scripts, case research, precedents.`;
+};
+
+/**
+ * Processes a legal query with Gemini AI, managing context and Pakistani law guidelines.
+ * 
+ * @param {Array} history - Array of previous formatted history messages
+ * @param {String} language - Language preference: 'english', 'urdu', or 'roman'
+ * @param {String} currentQuery - The user's new message
+ * @returns {String} AI's text response
+ */
+const sendLegalQuery = async (history, language, currentQuery) => {
+    try {
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.5-flash",
+            systemInstruction: {
+                role: "system",
+                parts: [{ text: buildSystemPrompt(language) }]
+            }
+        });
+
+        const chatSession = model.startChat({ history });
+
+        // 4. Send the query
+        const result = await chatSession.sendMessage(currentQuery);
+        return result.response.text();
+    } catch (error) {
+        console.error("LexAI Gemini Error - sendLegalQuery failed:", error.message);
+        throw new Error("Failed to communicate with AI model.");
+    }
+};
+
 module.exports = {
     getGeminiChatModel,
+    sendLegalQuery
 };

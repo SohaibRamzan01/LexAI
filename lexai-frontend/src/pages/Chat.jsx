@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { GoogleGenerativeAI } from '@google/generative-ai'
-
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY)
+import { sendMessage, getChatHistory } from '../services/api'
 
 const LANGUAGES = {
   english: {
@@ -23,42 +21,6 @@ const LANGUAGES = {
     hint: 'Bhejna ke liye Enter dabayein · Nai line ke liye Shift+Enter',
     typingText: 'LexAI tajziya kar raha hai...',
   },
-}
-
-const buildSystemPrompt = (lang) => {
-  const langInstructions = {
-    english: `You MUST respond ONLY in formal English.`,
-    urdu:    `آپ کو صرف اردو زبان میں جواب دینا ہے۔ تمام قانونی اصطلاحات اردو میں لکھیں۔`,
-    roman:   `Aap ko SIRF Roman Urdu mein jawab dena hai. Matlab Urdu bolain lekin English haroof mein likhain. Koi bhi English ya Urdu script use mat karein.`,
-  }
-  return `You are LexAI — an expert AI legal co-worker specializing EXCLUSIVELY in Pakistani law. You assist practicing lawyers in Pakistan with deep legal research, case strategy, bail applications, and courtroom preparation.
-
-LANGUAGE INSTRUCTION (MOST IMPORTANT RULE):
-${langInstructions[lang]}
-Never mix languages. Never switch language mid-response.
-
-YOUR EXPERTISE:
-- Pakistan Penal Code (PPC) — all sections especially 302, 324, 420, 34, etc.
-- Code of Criminal Procedure (CrPC) — bail under 497, 498, trials, hearings
-- Constitution of Pakistan 1973 — Articles 9, 10, 10-A, 25, etc.
-- Muslim Family Laws Ordinance (MFLO) — divorce, custody, maintenance
-- Qanun-e-Shahadat Order (Evidence Act)
-- Superior Court precedents — Supreme Court, LHC, SHC, PHC, IHC
-
-YOUR BEHAVIOR:
-1. When a lawyer first describes a case, ask 3-5 smart clarifying questions numbered clearly.
-2. Once you have enough context, provide a STRUCTURED response:
-   - APPLICABLE LAW: Relevant sections and punishments
-   - BAIL GROUNDS: Specific grounds for this case
-   - KEY PRECEDENTS: 3-5 real superior court cases with citations
-   - DEFENSE STRATEGY: Step-by-step approach
-   - COURT SCRIPT: Exact word-for-word script for the judge
-3. Always cite real Pakistani case law (e.g. 2019 SCMR 142)
-4. Always mention relevant constitutional articles
-5. Be specific to Pakistani courts
-
-FOCUS AREAS: Bail applications, case research, court scripts, constitutional rights.
-TONE: Professional, confident — like a senior legal colleague.`
 }
 
 const SIDEBAR_CASES = [
@@ -136,22 +98,44 @@ export default function Chat() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ── Greeting message when language changes ─────────────────
+  // ── Load Chat History on mount ─────────────────────────────
   useEffect(() => {
-    const greetings = {
-      english: `Salaam! I am **LexAI**, your AI legal co-worker specializing in **Pakistani law**.\n\nPlease describe your case in detail — tell me your client's situation, the section they are charged under, and what outcome you are seeking.\n\nI will provide you with:\n- Applicable laws & sections\n- Bail grounds & strategy\n- Relevant court precedents\n- Step-by-step court script`,
-      urdu:    `سلام! میں **LexAI** ہوں — پاکستانی قانون میں آپ کا AI قانونی ساتھی۔\n\nبراہ کرم اپنا مقدمہ تفصیل سے بیان کریں۔ میں آپ کو درج ذیل فراہم کروں گا:\n- قابل اطلاق قوانین\n- ضمانت کی بنیادیں\n- عدالتی نظائر\n- عدالت میں کیا کہنا ہے`,
-      roman:   `Salaam! Main **LexAI** hoon — Pakistani qanoon mein aap ka AI qanooni saathi.\n\nApna muqadma tafseel se bayan karein. Main aap ko yeh faraham karunga:\n- Qabil-e-tatbeeq qawaneen\n- Zamanat ki bunyadein\n- Adalati nazaair\n- Adalat mein kya kehna hai`,
+    const fetchHistory = async () => {
+      try {
+        const historyData = await getChatHistory(id)
+        
+        if (historyData && historyData.length > 0) {
+          const formattedMessages = historyData.map(msg => ({
+            id: msg._id || Date.now() + Math.random(),
+            role: msg.role,
+            text: msg.text,
+            time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            language: msg.language || 'english'
+          }))
+          setMessages(formattedMessages)
+          setChatHistory(formattedMessages)
+          if (formattedMessages.length >= 2) setResearchReady(true)
+        } else {
+          // If no history, show greeting
+          const greetings = {
+            english: `Salaam! I am **LexAI**, your AI legal co-worker specializing in **Pakistani law**.\n\nPlease describe your case in detail — tell me your client's situation, the section they are charged under, and what outcome you are seeking.\n\nI will provide you with:\n- Applicable laws & sections\n- Bail grounds & strategy\n- Relevant court precedents\n- Step-by-step court script`,
+            urdu:    `سلام! میں **LexAI** ہوں — پاکستانی قانون میں آپ کا AI قانونی ساتھی۔\n\nبراہ کرم اپنا مقدمہ تفصیل سے بیان کریں۔ میں آپ کو درج ذیل فراہم کروں گا:\n- قابل اطلاق قوانین\n- ضمانت کی بنیادیں\n- عدالتی نظائر\n- عدالت میں کیا کہنا ہے`,
+            roman:   `Salaam! Main **LexAI** hoon — Pakistani qanoon mein aap ka AI qanooni saathi.\n\nApna muqadma tafseel se bayan karein. Main aap ko yeh faraham karunga:\n- Qabil-e-tatbeeq qawaneen\n- Zamanat ki bunyadein\n- Adalati nazaair\n- Adalat mein kya kehna hai`,
+          }
+          setMessages([{
+            id: Date.now(), role: 'ai', text: greetings[language],
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }])
+        }
+      } catch (err) {
+        console.error("Failed to load chat history", err)
+      }
     }
-    setMessages([{
-      id: Date.now(), role: 'ai', text: greetings[language],
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    }])
-    setChatHistory([])
-    setResearchReady(false)
-    setFeeDetected(null)
-    setFeeDismissed(false)
-  }, [language])
+    
+    if (id) {
+      fetchHistory()
+    }
+  }, [id, language])
 
   // ── Fee detection ──────────────────────────────────────────
   const detectFeeInfo = (text) => {
@@ -237,32 +221,23 @@ export default function Chat() {
     detectFeeInfo(userText)
 
     try {
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        systemInstruction: buildSystemPrompt(language),
-      })
-
-      const history = chatHistory.map(h => ({
-        role: h.role,
-        parts: [{ text: h.text }],
-      }))
-
-      const chat   = model.startChat({ history })
-      const result = await chat.sendMessage(userText)
-      const aiText = result.response.text()
+      // Call our secure Backend API instead of Google Gemini directly!
+      const data = await sendMessage(id, userText, language)
+      
+      const aiText = data.aiMessage ? data.aiMessage.text : (data.message || 'No response')
 
       setChatHistory(prev => [
         ...prev,
-        { role: 'user',  text: userText },
-        { role: 'model', text: aiText   },
+        { role: 'user', text: userText },
+        { role: 'ai', text: aiText }
       ])
 
-      const aiMsg = {
+      const aiMsgObj = {
         id: Date.now() + 1, role: 'ai', text: aiText,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }
-      setMessages(prev => [...prev, aiMsg])
-      if (chatHistory.length >= 2) setResearchReady(true)
+      setMessages(prev => [...prev, aiMsgObj])
+      if (chatHistory.length >= 1) setResearchReady(true)
 
     } catch (err) {
       console.error('Gemini error:', err)

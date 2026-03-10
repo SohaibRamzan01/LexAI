@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { loginUser, registerUser } from '../services/api'
 
 export default function Auth() {
   const navigate = useNavigate()
@@ -8,11 +9,57 @@ export default function Auth() {
     firstName: '', lastName: '', email: '', password: '', confirmPassword: '', firm: ''
   })
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const handleInput = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
 
-  const handleSubmit = () => {
-    navigate('/dashboard')
+  const handleSubmit = async () => {
+    setError('')
+    setLoading(true)
+    
+    try {
+      let data;
+      if (activeTab === 'signin') {
+        if (!formData.email || !formData.password) {
+          throw new Error("Please fill all required fields");
+        }
+        data = await loginUser({ email: formData.email, password: formData.password });
+      } else {
+        if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
+          throw new Error("Please fill all required fields");
+        }
+        if (formData.password !== formData.confirmPassword) {
+            throw new Error("Passwords do not match");
+        }
+        data = await registerUser({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          password: formData.password,
+          lawFirm: formData.firm,
+          barEnrollmentNumber: ''
+        });
+      }
+
+      if (data.token) {
+        localStorage.setItem('lexai_token', data.token);
+        localStorage.setItem('lexai_user', JSON.stringify({
+          _id: data._id,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          lawFirm: data.lawFirm
+        }));
+        navigate('/dashboard');
+      } else {
+        setError(data.message || 'Authentication failed');
+      }
+    } catch (err) {
+      setError(err.message || 'An error occurred during authentication.');
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -304,8 +351,14 @@ export default function Auth() {
 
               <div className="forgot-link">Forgot password?</div>
 
-              <button className="btn-submit" onClick={handleSubmit}>
-                Sign In to LexAI →
+              {error && (
+                <div style={{ color: '#E07060', fontSize: '13px', marginBottom: '16px', background: 'rgba(224,112,96,0.1)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(224,112,96,0.2)' }}>
+                  ⚠️ {error}
+                </div>
+              )}
+
+              <button className="btn-submit" onClick={handleSubmit} disabled={loading} style={{ opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Authenticating...' : 'Sign In to LexAI →'}
               </button>
 
               <div className="divider"><span>or continue with</span></div>
@@ -419,8 +472,14 @@ export default function Auth() {
                 )}
               </div>
 
-              <button className="btn-submit" onClick={handleSubmit}>
-                Create My LexAI Account →
+              {error && (
+                <div style={{ color: '#E07060', fontSize: '13px', marginBottom: '16px', background: 'rgba(224,112,96,0.1)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(224,112,96,0.2)' }}>
+                  ⚠️ {error}
+                </div>
+              )}
+
+              <button className="btn-submit" onClick={handleSubmit} disabled={loading} style={{ opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Creating Account...' : 'Create My LexAI Account →'}
               </button>
 
               <div className="terms-text">

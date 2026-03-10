@@ -51,15 +51,10 @@ router.post("/", async (req, res) => {
 // @access  Private
 router.get("/:id", async (req, res) => {
     try {
-        const caseItem = await Case.findById(req.params.id);
+        const caseItem = await Case.findOne({ _id: req.params.id, lawyer: req.user._id });
 
         if (!caseItem) {
-            return res.status(404).json({ message: "Case not found" });
-        }
-
-        // Ensure the logged-in lawyer actually owns the case (data isolation)
-        if (caseItem.lawyer.toString() !== req.user._id.toString()) {
-            return res.status(401).json({ message: "Not authorized to access this case" });
+            return res.status(404).json({ message: "Case not found or unauthorized" });
         }
 
         res.status(200).json(caseItem);
@@ -73,15 +68,10 @@ router.get("/:id", async (req, res) => {
 // @access  Private
 router.put("/:id", async (req, res) => {
     try {
-        const caseItem = await Case.findById(req.params.id);
+        const caseItem = await Case.findOne({ _id: req.params.id, lawyer: req.user._id });
 
         if (!caseItem) {
-            return res.status(404).json({ message: "Case not found" });
-        }
-
-        // Ensure the logged-in lawyer owns the case
-        if (caseItem.lawyer.toString() !== req.user._id.toString()) {
-            return res.status(401).json({ message: "Not authorized to update this case" });
+            return res.status(404).json({ message: "Case not found or unauthorized" });
         }
 
         const updatedCase = await Case.findByIdAndUpdate(
@@ -102,15 +92,10 @@ router.put("/:id", async (req, res) => {
 // @access  Private
 router.delete("/:id", async (req, res) => {
     try {
-        const caseItem = await Case.findById(req.params.id);
+        const caseItem = await Case.findOne({ _id: req.params.id, lawyer: req.user._id });
 
         if (!caseItem) {
-            return res.status(404).json({ message: "Case not found" });
-        }
-
-        // Ensure the logged-in lawyer owns the case
-        if (caseItem.lawyer.toString() !== req.user._id.toString()) {
-            return res.status(401).json({ message: "Not authorized to delete this case" });
+            return res.status(404).json({ message: "Case not found or unauthorized" });
         }
 
         // Delete the case itself

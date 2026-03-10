@@ -1,14 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-const CASES = [
-  { id: 1, code: 'CR-2024-0042', client: 'Ahmad Raza', section: 'Sec. 302', type: 'Murder', court: 'Lahore Sessions Court', status: 'active', tag: 'Active', date: 'Today', ppc: 'PPC § 302' },
-  { id: 2, code: 'CR-2024-0038', client: 'Bilal Khan', section: 'Sec. 420', type: 'Fraud', court: 'Islamabad HC', status: 'done', tag: 'Research Done', date: 'Yesterday', ppc: 'PPC § 420' },
-  { id: 3, code: 'FM-2024-0021', client: 'Sara Ali', section: 'Custody', type: 'Family', court: 'Family Court Karachi', status: 'pending', tag: 'Pending', date: '2d ago', ppc: 'MFLO § 25' },
-  { id: 4, code: 'CR-2024-0055', client: 'Tariq Butt', section: 'Bail App.', type: 'Criminal', court: 'District Court', status: 'urgent', tag: 'Urgent', date: '3d ago', ppc: 'CrPC § 497' },
-  { id: 5, code: 'CR-2024-0029', client: 'Hassan Mehmood', section: 'Sec. 324', type: 'Attempt Murder', court: 'Sessions Court', status: 'done', tag: 'Closed', date: '1wk ago', ppc: 'PPC § 324' },
-  { id: 6, code: 'FM-2024-0015', client: 'Nadia Malik', section: 'Divorce', type: 'Family', court: 'Family Court LHR', status: 'closed', tag: 'Closed', date: '2wk ago', ppc: 'MFLO § 7' },
-]
+import { getCases, createCase, deleteCase } from '../services/api'
 
 const STATUS_COLORS = {
   active: { dot: '#4CAF7A', tag: 'rgba(76,175,122,0.12)', tagText: '#4CAF7A', tagBorder: 'rgba(76,175,122,0.25)', accent: '#4CAF7A' },
@@ -23,40 +15,90 @@ export default function Dashboard() {
   const [activeCase, setActiveCase] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
   const [showDeleteModal, setShowDeleteModal] = useState(null)
-  const [cases, setCases] = useState(CASES)
+  const [cases, setCases] = useState([])
+  const [loading, setLoading] = useState(true)
   const [showNewCase, setShowNewCase] = useState(false)
   const [newCase, setNewCase] = useState({ client: '', section: '', type: '', court: '' })
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  const filtered = cases.filter(c =>
-    c.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.section.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.type.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-
-  const handleDelete = (id) => {
-    setCases(cases.filter(c => c.id !== id))
-    setShowDeleteModal(null)
-    if (activeCase === id) setActiveCase(cases[0]?.id)
+  const fetchCases = async () => {
+    setLoading(true)
+    try {
+      const data = await getCases()
+      if (Array.isArray(data)) {
+        const formattedCases = data.map(c => ({
+          id: c._id,
+          code: c.caseCode || 'CR-NEW',
+          client: c.clientName,
+          section: c.section || 'N/A',
+          type: c.caseType || 'General',
+          court: c.court || 'TBD',
+          status: c.status || 'pending',
+          tag: (c.status || 'pending').toUpperCase(),
+          date: new Date(c.createdAt).toLocaleDateString(),
+          ppc: c.section || 'N/A',
+        }))
+        setCases(formattedCases)
+        if (formattedCases.length > 0 && !activeCase) {
+          setActiveCase(formattedCases[0].id)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch cases:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleAddCase = () => {
-    if (!newCase.client || !newCase.section) return
-    const created = {
-      id: Date.now(),
-      code: `CR-2024-00${Math.floor(Math.random() * 90 + 10)}`,
-      client: newCase.client,
-      section: newCase.section,
-      type: newCase.type || 'General',
-      court: newCase.court || 'TBD',
-      status: 'active',
-      tag: 'Active',
-      date: 'Just now',
-      ppc: newCase.section,
+  useEffect(() => {
+    fetchCases()
+    // eslint-disable-next-line
+  }, [])
+
+  const filtered = cases.filter(c =>
+    (c.client || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.section || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.type || '').toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const handleDelete = async (id) => {
+    setDeleting(true)
+    try {
+      await deleteCase(id)
+      setCases(cases.filter(c => c.id !== id))
+      setShowDeleteModal(null)
+      if (activeCase === id) setActiveCase(cases[0]?.id || null)
+    } catch (error) {
+      console.error("Failed to delete case:", error)
+    } finally {
+      setDeleting(false)
     }
-    setCases([created, ...cases])
-    setNewCase({ client: '', section: '', type: '', court: '' })
-    setShowNewCase(false)
+  }
+
+  const handleAddCase = async () => {
+    if (!newCase.client || !newCase.section) return
+    setCreating(true)
+    try {
+      const createdData = await createCase({
+        title: `${newCase.client} - ${newCase.type || 'General'}`,
+        clientName: newCase.client,
+        section: newCase.section,
+        caseType: newCase.type || 'General',
+        court: newCase.court || 'TBD',
+      })
+      
+      if (createdData._id) {
+        await fetchCases() // refresh list
+        setNewCase({ client: '', section: '', type: '', court: '' })
+        setShowNewCase(false)
+      }
+    } catch (error) {
+      console.error("Failed to create case:", error)
+    } finally {
+      setCreating(false)
+    }
   }
 
   const activeCaseData = cases.find(c => c.id === activeCase)
@@ -420,7 +462,9 @@ export default function Dashboard() {
 
         {/* TOPBAR */}
         <div className="dash-topbar">
-          <div className="dash-greeting">Good Morning, <span>Ali</span> ⚖</div>
+          <div className="dash-greeting">
+            Good Morning, <span>{JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName || 'Advocate'}</span> ⚖
+          </div>
           <div className="topbar-right">
             <div className="search-box">
               <span style={{ color: '#6B6560', fontSize: '14px' }}>🔍</span>
@@ -432,7 +476,7 @@ export default function Dashboard() {
               />
             </div>
             <button className="topbar-btn">📊 Reports</button>
-            <button className="topbar-btn" onClick={() => navigate('/auth')}>⬚ Sign Out</button>
+            <button className="topbar-btn" onClick={() => { localStorage.removeItem("lexai_token"); navigate('/auth'); }}>⬚ Sign Out</button>
           </div>
         </div>
 
@@ -467,8 +511,14 @@ export default function Dashboard() {
           </div>
 
           <div className="cases-grid">
-            {filtered.map(c => {
-              const col = STATUS_COLORS[c.status]
+            {loading ? (
+              <div style={{ padding: '40px', textAlign: 'center', width: '100%', gridColumn: '1 / -1', color: '#6B6560' }}>
+                <div style={{ fontSize: '24px', marginBottom: '12px', animation: 'spin 1s linear infinite' }}>⏳</div>
+                <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                Loading cases from LexAI securing server...
+              </div>
+            ) : filtered.map(c => {
+              const col = STATUS_COLORS[c.status] || STATUS_COLORS.pending
               return (
                 <div
                   key={c.id}
@@ -526,7 +576,9 @@ export default function Dashboard() {
             </div>
             <div className="modal-actions">
               <button className="modal-btn cancel" onClick={() => setShowDeleteModal(null)}>Cancel</button>
-              <button className="modal-btn confirm-del" onClick={() => handleDelete(showDeleteModal)}>Yes, Delete Case</button>
+              <button className="modal-btn confirm-del" onClick={() => handleDelete(showDeleteModal)} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Yes, Delete Case'}
+              </button>
             </div>
           </div>
         </div>
@@ -546,7 +598,9 @@ export default function Dashboard() {
             <input className="modal-input" placeholder="Court Name" value={newCase.court} onChange={e => setNewCase({ ...newCase, court: e.target.value })} />
             <div className="modal-actions">
               <button className="modal-btn cancel" onClick={() => setShowNewCase(false)}>Cancel</button>
-              <button className="modal-btn confirm-add" onClick={handleAddCase}>＋ Create Case</button>
+              <button className="modal-btn confirm-add" onClick={handleAddCase} disabled={creating} style={{ opacity: creating ? 0.7 : 1 }}>
+                {creating ? 'Creating...' : '＋ Create Case'}
+              </button>
             </div>
           </div>
         </div>

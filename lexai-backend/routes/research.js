@@ -9,12 +9,9 @@ router.use(protect);
 
 // Helper function to verify case ownership
 const verifyCaseOwnership = async (caseId, userId) => {
-    const caseItem = await Case.findById(caseId);
+    const caseItem = await Case.findOne({ _id: caseId, lawyer: userId });
     if (!caseItem) {
-        throw new Error("Case not found");
-    }
-    if (caseItem.lawyer.toString() !== userId.toString()) {
-        throw new Error("Not authorized to access this case");
+        throw new Error("Case not found or unauthorized to access this case");
     }
     return caseItem;
 };
@@ -51,32 +48,74 @@ router.post("/:caseId", async (req, res) => {
             return res.status(400).json({ message: "Research already exists for this case. Use PUT to update." });
         }
 
-        // Prepare prompt for Gemini to generate structured legal research
         const model = getGeminiChatModel();
 
-        // We request JSON format so we can easily map the AI's response to our Mongoose model
-        const prompt = `Act as an expert Pakistani legal AI assistant. Generate comprehensive legal research for the following case:
+        const prompt = `Act as an expert Pakistani legal AI assistant. Generate comprehensive legal research for:
 Title: ${caseItem.title}
 Client: ${caseItem.clientName}
 Section of Law: ${caseItem.section || 'Not specified'}
 Case Type: ${caseItem.caseType || 'Not specified'}
 Court: ${caseItem.court || 'Not specified'}
 
-Based on Pakistani law (PPC, CrPC, Constitution of Pakistan, etc.), please provide the output ONLY as a valid JSON object with the following keys exactly:
-{
-  "applicableLaw": "Detailed explanation of relevant statutes and sections",
-  "bailGrounds": "Strong arguments for bail (if applicable) or defense grounds",
-  "precedents": ["Citation of relevant Supreme Court or High Court of Pakistan judgments (PLD, SCMR, YLR, etc.)", "Another citation..."],
-  "defenseStrategy": "A step-by-step recommended defense strategy",
-  "courtScript": "Suggested opening arguments or key points to speak in court",
-  "constitutionalRights": "Any fundamental rights under the Constitution of Pakistan implicated here"
-}`;
+Based on Pakistani law (PPC, CrPC, Constitution of Pakistan, etc.), output ONLY a valid JSON array of 5 exact objects representing these sections: law, bail, precedents, defense, constitution. 
+Do not wrap it in any other JSON object. Return an ARRAY directly.
+Format EXACTLY like this:
+[
+  {
+    "id": "law",
+    "icon": "⚖",
+    "title": "Applicable Law & Charges",
+    "tag": "e.g. PPC § 302",
+    "content": "Detailed explanation of relevant statutes.",
+    "highlight": "Optional key takeaway point.",
+    "items": []
+  },
+  {
+    "id": "bail",
+    "icon": "🔓",
+    "title": "Bail Grounds & Legal Basis",
+    "tag": "e.g. CrPC § 497",
+    "content": "Explanation of bail chances.",
+    "highlight": null,
+    "items": [
+      { "title": "Ground 1", "detail": "Detail for ground 1" }
+    ]
+  },
+  {
+    "id": "precedents",
+    "icon": "📚",
+    "title": "Relevant Case Precedents",
+    "tag": "e.g. 3 Found",
+    "content": "Intro text for precedents.",
+    "precedents": [
+      { "name": "Party v Party", "year": "2019 SCMR 123", "court": "Supreme Court", "detail": "Precedent ruling..." }
+    ]
+  },
+  {
+    "id": "defense",
+    "icon": "🛡",
+    "title": "Defense Strategy",
+    "tag": "Recommended",
+    "content": "Step-by-step strategy.",
+    "highlight": "Crucial strategic advice.",
+    "items": [
+      { "title": "Step 1", "detail": "Detail for step 1" }
+    ]
+  },
+  {
+    "id": "constitution",
+    "icon": "📜",
+    "title": "Constitutional Rights",
+    "tag": "Arts. 9, 10-A",
+    "content": "Fundamental rights implicated.",
+    "items": [
+      { "title": "Right 1", "detail": "Explanation..." }
+    ]
+  }
+]`;
 
-        // Generate content using Gemini
         const result = await model.generateContent(prompt);
         let aiResponse = result.response.text();
-
-        // Clean the response (Gemini sometimes wraps JSON in markdown blocks)
         aiResponse = aiResponse.replace(/```json\n?|\n?```/g, '').trim();
 
         let parsedResearch;
@@ -87,15 +126,9 @@ Based on Pakistani law (PPC, CrPC, Constitution of Pakistan, etc.), please provi
             return res.status(500).json({ message: "AI generated invalid format. Please try again." });
         }
 
-        // Create and save new research document
         const newResearch = new Research({
             case: caseItem._id,
-            applicableLaw: parsedResearch.applicableLaw || "",
-            bailGrounds: parsedResearch.bailGrounds || "",
-            precedents: Array.isArray(parsedResearch.precedents) ? parsedResearch.precedents : [],
-            defenseStrategy: parsedResearch.defenseStrategy || "",
-            courtScript: parsedResearch.courtScript || "",
-            constitutionalRights: parsedResearch.constitutionalRights || ""
+            sections: Array.isArray(parsedResearch) ? parsedResearch : []
         });
 
         const savedResearch = await newResearch.save();
@@ -114,20 +147,11 @@ router.put("/:caseId", async (req, res) => {
     try {
         await verifyCaseOwnership(req.params.caseId, req.user._id);
 
-        const { applicableLaw, bailGrounds, precedents, defenseStrategy, courtScript, constitutionalRights } = req.body;
+        const { sections } = req.body;
 
         const updatedResearch = await Research.findOneAndUpdate(
             { case: req.params.caseId },
-            {
-                $set: {
-                    applicableLaw,
-                    bailGrounds,
-                    precedents,
-                    defenseStrategy,
-                    courtScript,
-                    constitutionalRights
-                }
-            },
+            { $set: { sections } },
             { new: true, runValidators: true }
         );
 

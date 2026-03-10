@@ -51,29 +51,23 @@ const caseSchema = new mongoose.Schema(
 );
 
 // --------------- Pre-save hook: auto-generate caseCode ---------------
-caseSchema.pre("save", async function (next) {
+caseSchema.pre("save", async function () {
     // Only generate on new documents
-    if (!this.isNew || this.caseCode) return next();
+    if (!this.isNew || this.caseCode) return;
 
-    try {
-        const year = new Date().getFullYear();
+    const year = new Date().getFullYear();
 
-        // Count existing cases for the current year to determine the next sequence
-        const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
-        const yearEnd = new Date(`${year + 1}-01-01T00:00:00.000Z`);
+    // Count existing cases for the current year to determine the next sequence
+    const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
+    const yearEnd = new Date(`${year + 1}-01-01T00:00:00.000Z`);
 
-        const count = await mongoose.model("Case").countDocuments({
-            createdAt: { $gte: yearStart, $lt: yearEnd },
-        });
+    const count = await mongoose.model("Case").countDocuments({
+        createdAt: { $gte: yearStart, $lt: yearEnd },
+    });
 
-        // Sequence is zero-padded to 4 digits → CR-2026-0001
-        const sequence = String(count + 1).padStart(4, "0");
-        this.caseCode = `CR-${year}-${sequence}`;
-
-        next();
-    } catch (err) {
-        next(err);
-    }
+    // Sequence is zero-padded to 4 digits → CR-2026-0001
+    const sequence = String(count + 1).padStart(4, "0");
+    this.caseCode = `CR-${year}-${sequence}`;
 });
 
 const Case = mongoose.model("Case", caseSchema);

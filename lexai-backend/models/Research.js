@@ -7,30 +7,30 @@ const researchSchema = new mongoose.Schema({
         required: [true, "Case reference is required"],
         unique: true,
     },
-    applicableLaw: {
-        type: String,
-        default: "",
-    },
-    bailGrounds: {
-        type: String,
-        default: "",
-    },
-    precedents: {
-        type: [String],
-        default: [],
-    },
-    defenseStrategy: {
-        type: String,
-        default: "",
-    },
-    courtScript: {
-        type: String,
-        default: "",
-    },
-    constitutionalRights: {
-        type: String,
-        default: "",
-    },
+    sections: [
+        {
+            id: String,
+            icon: String,
+            title: String,
+            tag: String,
+            content: String,
+            highlight: String,
+            items: [
+                {
+                    title: String,
+                    detail: String,
+                }
+            ],
+            precedents: [
+                {
+                    name: String,
+                    year: String,
+                    court: String,
+                    detail: String,
+                }
+            ]
+        }
+    ],
     generatedAt: {
         type: Date,
         default: Date.now,
