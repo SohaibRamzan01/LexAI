@@ -35,11 +35,66 @@ export const getCases = async () => {
     return res.json();
 };
 
+export const getCase = async (id) => {
+    const res = await fetch(`${BASE_URL}/cases/${id}`, {
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
 export const createCase = async (data) => {
+    const payload = {
+        title: data.title,
+        clientName: data.clientName,
+        section: data.section,
+        caseType: data.caseType,
+        court: data.court,
+        status: data.status,
+        language: data.language,
+        caseNumber: data.caseNumber,
+        caseYear: data.caseYear,
+        onBehalfOf: data.onBehalfOf,
+        partyName: data.partyName,
+        contactNo: data.contactNo,
+        respondentName: data.respondentName,
+        firNumber: data.firNumber,
+        policeStation: data.policeStation,
+        adverseAdvocateName: data.adverseAdvocateName,
+        adverseAdvocateContact: data.adverseAdvocateContact
+    };
     const res = await fetch(`${BASE_URL}/cases`, {
         method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify(data)
+        body: JSON.stringify(payload)
+    });
+    return res.json();
+};
+
+export const updateCase = async (id, data) => {
+    const payload = {
+        title: data.title,
+        clientName: data.clientName,
+        section: data.section,
+        caseType: data.caseType,
+        court: data.court,
+        status: data.status,
+        language: data.language,
+        caseNumber: data.caseNumber,
+        caseYear: data.caseYear,
+        onBehalfOf: data.onBehalfOf,
+        partyName: data.partyName,
+        contactNo: data.contactNo,
+        respondentName: data.respondentName,
+        firNumber: data.firNumber,
+        policeStation: data.policeStation,
+        adverseAdvocateName: data.adverseAdvocateName,
+        adverseAdvocateContact: data.adverseAdvocateContact
+    };
+    const res = await fetch(`${BASE_URL}/cases/${id}`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
     });
     return res.json();
 };
@@ -49,6 +104,30 @@ export const deleteCase = async (id) => {
         method: "DELETE",
         headers: getHeaders()
     });
+    return res.json();
+};
+
+export const addHearing = async (caseId, data) => {
+    const res = await fetch(`${BASE_URL}/cases/${caseId}/hearings`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+            previousDate: data.previousDate,
+            adjournDate: data.adjournDate,
+            step: data.step,
+            notes: data.notes
+        }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const deleteHearing = async (caseId, hearingId) => {
+    const res = await fetch(`${BASE_URL}/cases/${caseId}/hearings/${hearingId}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error(await res.text());
     return res.json();
 };
 

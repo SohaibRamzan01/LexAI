@@ -1,7 +1,18 @@
 const mongoose = require("mongoose");
 
+// HearingSchema — defined ABOVE CaseSchema in models/Case.js
+const HearingSchema = new mongoose.Schema({
+    previousDate: { type: Date },
+    adjournDate:  { type: Date, required: true },
+    step:         { type: String },   // "Summon", "Arguments", "Judgment" etc.
+    notes:        { type: String },   // optional notes about this hearing
+    addedBy:      { type: String },   // lawyer name
+    addedAt:      { type: Date, default: Date.now },
+}, { _id: true });
+
 const caseSchema = new mongoose.Schema(
     {
+        // ── EXISTING FIELDS (keep as-is) ──────────────────────────
         title: {
             type: String,
             required: [true, "Case title is required"],
@@ -33,7 +44,7 @@ const caseSchema = new mongoose.Schema(
                 values: ["active", "pending", "done", "urgent", "closed"],
                 message: "{VALUE} is not a valid status",
             },
-            default: "pending",
+            default: "active",
         },
         lawyer: {
             type: mongoose.Schema.Types.ObjectId,
@@ -43,6 +54,57 @@ const caseSchema = new mongoose.Schema(
         caseCode: {
             type: String,
             unique: true,
+        },
+        language: {
+            type: String,
+            enum: ["english", "urdu", "roman"],
+            default: "english",
+        },
+
+        // ── NEW FIELDS ────────────────────────────────────────────
+        caseNumber: {
+            type: String,
+        },
+        caseYear: {
+            type: String,
+        },
+        onBehalfOf: {
+            type: String,
+            enum: ["Plaintiff", "Defendant", "Petitioner", "Respondent", "Complainant", "Accused"],
+        },
+        partyName: {
+            type: String,
+        },
+        contactNo: {
+            type: String,
+        },
+        respondentName: {
+            type: String,
+        },
+        firNumber: {
+            type: String,
+        },
+        policeStation: {
+            type: String,
+        },
+        adverseAdvocateName: {
+            type: String,
+        },
+        adverseAdvocateContact: {
+            type: String,
+        },
+
+        // ── HEARING HISTORY ──────────────────────────────────────
+        hearings: [HearingSchema],
+
+        // ── TIMESTAMPS ───────────────────────────────────────────
+        createdAt: {
+            type: Date,
+            default: Date.now,
+        },
+        updatedAt: {
+            type: Date,
+            default: Date.now,
         },
     },
     {

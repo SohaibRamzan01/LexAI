@@ -63,8 +63,7 @@ export default function Chat() {
   const [messages,      setMessages]      = useState([])
   const [input,         setInput]         = useState('')
   const [isTyping,      setIsTyping]      = useState(false)
-  const [caseTitle,     setCaseTitle]     = useState('New Case')
-  const [caseSection,   setCaseSection]   = useState('')
+  const [currentCaseObj,setCurrentCaseObj]= useState({})
   const [researchReady, setResearchReady] = useState(false)
   const [error,         setError]         = useState(null)
   const [chatHistory,   setChatHistory]   = useState([])
@@ -100,7 +99,14 @@ export default function Chat() {
       try {
         const historyData = await getChatHistory(id)
         
-        if (historyData && historyData.length > 0) {
+        if (historyData && historyData.message && historyData.message.includes('Not authorized')) {
+           localStorage.removeItem('lexai_token');
+           localStorage.removeItem('lexai_user');
+           navigate('/auth');
+           return;
+        }
+        
+        if (Array.isArray(historyData) && historyData.length > 0) {
           const formattedMessages = historyData.map(msg => ({
             id: msg._id || Date.now() + Math.random(),
             role: msg.role,
@@ -131,11 +137,16 @@ export default function Chat() {
     const loadCases = async () => {
       try {
         const data = await getCases()
+        if (data && data.message && data.message.includes('Not authorized')) {
+           localStorage.removeItem('lexai_token');
+           localStorage.removeItem('lexai_user');
+           navigate('/auth');
+           return;
+        }
         setCases(data)
         const currentCase = data.find(c => String(c._id) === String(id))
         if (currentCase) {
-          setCaseTitle(currentCase.clientName || 'New Case')
-          setCaseSection(currentCase.section ? `Section ${currentCase.section}` : '')
+          setCurrentCaseObj(currentCase)
         }
       } catch (error) {
         console.error(error)
@@ -212,11 +223,12 @@ export default function Chat() {
     if (!input.trim() || isTyping) return
     const userText = input.trim()
 
-    if (messages.length <= 1) {
+    if (messages.length <= 1 && !currentCaseObj.clientName) {
       const words = userText.split(' ')
-      setCaseTitle(words.slice(0, 5).join(' ') + (words.length > 5 ? '...' : ''))
+      const inferredTitle = words.slice(0, 5).join(' ') + (words.length > 5 ? '...' : '')
       const secMatch = userText.match(/\b\d{3}\b/)
-      if (secMatch) setCaseSection(`Section ${secMatch[0]}`)
+      const inferredSection = secMatch ? secMatch[0] : ''
+      setCurrentCaseObj(prev => ({ ...prev, clientName: inferredTitle, section: inferredSection }))
     }
 
     const userMsg = {
@@ -548,7 +560,7 @@ export default function Chat() {
           {cases.map(c => (
             <div key={c._id}
               className={`case-item ${String(c._id) === String(id) ? 'active' : ''}`}
-              onClick={() => navigate(`/case/${c._id}/chat`)}>
+              onClick={() => navigate(`/case/${c._id}/details`)}>
               <div className="case-dot" style={{ background: STATUS_DOT[c.status] || STATUS_DOT.pending }} />
               <div>
                 <div className="case-item-title">{c.clientName} · {c.section}</div>
@@ -574,11 +586,11 @@ export default function Chat() {
         {/* TOPBAR */}
         <div className="chat-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="chat-case-badge">CR-2024-{id || '0042'}</div>
+            <div className="chat-case-badge">{currentCaseObj.caseCode || `CR-2024-${id || '0042'}`}</div>
             <div>
-              <div className="chat-case-name">{caseTitle}</div>
+              <div className="chat-case-name">{currentCaseObj.clientName || 'New Case'}</div>
               <div className="chat-case-sub">
-                {caseSection || 'Pakistan Law AI'} · {lang.flag} {lang.label}
+                {currentCaseObj.section ? `Section ${currentCaseObj.section}` : 'Pakistan Law AI'} · {lang.flag} {lang.label}
               </div>
             </div>
           </div>
@@ -637,7 +649,7 @@ export default function Chat() {
           {messages.map(msg => (
             <div key={msg.id} className={`msg-row ${msg.role === 'user' ? 'user-row' : ''}`}>
               <div className={`msg-avatar ${msg.role === 'ai' ? 'ai-avatar' : 'user-avatar-msg'}`}>
-                {msg.role === 'ai' ? 'L' : 'AK'}
+                {msg.role === 'ai' ? 'L' : (JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName?.[0] || 'A').toUpperCase()}
               </div>
               <div className="msg-content">
                 {msg.role === 'ai' && (

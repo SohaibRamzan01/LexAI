@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Landing    from './pages/Landing'
 import Auth       from './pages/Auth'
 import Dashboard  from './pages/Dashboard'
+import CaseDetail from './pages/CaseDetail'
 import Chat       from './pages/Chat'
 import Research   from './pages/Research'
 import CourtGuide from './pages/CourtGuide'
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/"                    element={<Landing />}     />
         <Route path="/auth"                element={<Auth />}        />
         <Route path="/dashboard"           element={<Dashboard />}   />
+        <Route path="/case/:id/details"    element={<CaseDetail />}  />
         <Route path="/case/:id/chat"       element={<Chat />}        />
         <Route path="/case/:id/research"   element={<Research />}    />
         <Route path="/case/:id/guide"      element={<CourtGuide />}  />

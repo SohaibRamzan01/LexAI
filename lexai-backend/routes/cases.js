@@ -26,7 +26,25 @@ router.get("/", async (req, res) => {
 // @access  Private
 router.post("/", async (req, res) => {
     try {
-        const { title, clientName, section, caseType, court, status } = req.body;
+        const {
+            title,
+            clientName,
+            section,
+            caseType,
+            court,
+            status,
+            language,
+            caseNumber,
+            caseYear,
+            onBehalfOf,
+            partyName,
+            contactNo,
+            respondentName,
+            firNumber,
+            policeStation,
+            adverseAdvocateName,
+            adverseAdvocateContact,
+        } = req.body;
 
         const newCase = new Case({
             title,
@@ -35,8 +53,19 @@ router.post("/", async (req, res) => {
             caseType,
             court,
             status,
+            language,
+            caseNumber,
+            caseYear,
+            onBehalfOf,
+            partyName,
+            contactNo,
+            respondentName,
+            firNumber,
+            policeStation,
+            adverseAdvocateName,
+            adverseAdvocateContact,
             // Associate the user making the request with the new case
-            lawyer: req.user._id,
+            lawyer: req.user.id,
         });
 
         const savedCase = await newCase.save();
@@ -68,16 +97,60 @@ router.get("/:id", async (req, res) => {
 // @access  Private
 router.put("/:id", async (req, res) => {
     try {
-        const caseItem = await Case.findOne({ _id: req.params.id, lawyer: req.user._id });
+        // Find case by ID and verify ownership
+        const caseItem = await Case.findOne({ _id: req.params.id, lawyer: req.user.id });
 
         if (!caseItem) {
             return res.status(404).json({ message: "Case not found or unauthorized" });
         }
 
-        const updatedCase = await Case.findByIdAndUpdate(
-            req.params.id,
-            req.body,
-            // true returns the updated document, runValidators ensures enums like 'status' are valid
+        const {
+            title,
+            clientName,
+            section,
+            caseType,
+            court,
+            status,
+            language,
+            caseNumber,
+            caseYear,
+            onBehalfOf,
+            partyName,
+            contactNo,
+            respondentName,
+            firNumber,
+            policeStation,
+            adverseAdvocateName,
+            adverseAdvocateContact,
+        } = req.body;
+
+        const updateData = {
+            title,
+            clientName,
+            section,
+            caseType,
+            court,
+            status,
+            language,
+            caseNumber,
+            caseYear,
+            onBehalfOf,
+            partyName,
+            contactNo,
+            respondentName,
+            firNumber,
+            policeStation,
+            adverseAdvocateName,
+            adverseAdvocateContact,
+            updatedAt: new Date(),
+        };
+
+        // Remove undefined fields so we only update the fields provided
+        Object.keys(updateData).forEach((key) => updateData[key] === undefined && delete updateData[key]);
+
+        const updatedCase = await Case.findOneAndUpdate(
+            { _id: req.params.id, lawyer: req.user.id },
+            updateData,
             { new: true, runValidators: true }
         );
 
@@ -108,6 +181,42 @@ router.delete("/:id", async (req, res) => {
         res.status(200).json({ message: "Case and all associated messages/research removed" });
     } catch (error) {
         res.status(500).json({ message: error.message || "Server Error" });
+    }
+});
+
+// @route   POST /api/cases/:id/hearings
+// @desc    Add a hearing to a case
+// @access  Private
+router.post("/:id/hearings", async (req, res) => {
+    try {
+        const caseDoc = await Case.findOne({ _id: req.params.id, lawyer: req.user.id });
+        if (!caseDoc) return res.status(404).json({ error: "Case not found" });
+
+        const { previousDate, adjournDate, step, notes } = req.body;
+        caseDoc.hearings.push({ previousDate, adjournDate, step, notes });
+        caseDoc.updatedAt = new Date();
+        await caseDoc.save();
+
+        res.status(201).json({ success: true, case: caseDoc });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// @route   DELETE /api/cases/:id/hearings/:hearingId
+// @desc    Delete a hearing from a case
+// @access  Private
+router.delete("/:id/hearings/:hearingId", async (req, res) => {
+    try {
+        const caseDoc = await Case.findOne({ _id: req.params.id, lawyer: req.user.id });
+        if (!caseDoc) return res.status(404).json({ error: "Case not found" });
+
+        caseDoc.hearings.pull({ _id: req.params.hearingId });
+        await caseDoc.save();
+
+        res.json({ success: true, case: caseDoc });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

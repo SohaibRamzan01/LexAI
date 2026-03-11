@@ -512,7 +512,7 @@ export default function CourtGuide() {
           {cases.map(c => (
             <div key={c._id}
               className={`case-item ${String(c._id) === String(id) ? 'active' : ''}`}
-              onClick={() => navigate(`/case/${c._id}/guide`)}>
+              onClick={() => navigate(`/case/${c._id}/details`)}>
               <div className="case-dot" style={{ background: STATUS_DOT[c.status] || STATUS_DOT.pending }} />
               <div>
                 <div className="case-item-title">{c.clientName} · {c.section}</div>

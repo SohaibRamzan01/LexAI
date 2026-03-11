@@ -18,7 +18,27 @@ export default function Dashboard() {
   const [cases, setCases] = useState([])
   const [loading, setLoading] = useState(true)
   const [showNewCase, setShowNewCase] = useState(false)
-  const [newCase, setNewCase] = useState({ client: '', section: '', type: '', court: '' })
+  
+  const [newCaseForm, setNewCaseForm] = useState({
+    title:                  "",
+    court:                  "",
+    caseType:               "",
+    caseNumber:             "",
+    caseYear:               new Date().getFullYear().toString(),
+    onBehalfOf:             "",
+    status:                 "active",
+    partyName:              "",
+    contactNo:              "",
+    clientName:             "",
+    respondentName:         "",
+    section:                "",
+    firNumber:              "",
+    policeStation:          "",
+    adverseAdvocateName:    "",
+    adverseAdvocateContact: "",
+    language:               "english",
+  });
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -46,6 +66,9 @@ export default function Dashboard() {
           tag: (c.status || 'pending').toUpperCase(),
           date: new Date(c.createdAt).toLocaleDateString(),
           ppc: c.section || 'N/A',
+          onBehalfOf: c.onBehalfOf || '',
+          firNumber: c.firNumber || '',
+          title: c.title || `${c.clientName} - ${c.caseType || 'General'}`,
         }))
         setCases(formattedCases)
         if (formattedCases.length > 0 && !activeCase) {
@@ -85,20 +108,22 @@ export default function Dashboard() {
   }
 
   const handleAddCase = async () => {
-    if (!newCase.client || !newCase.section) return
+    if (!newCaseForm.title) return
     setCreating(true)
     try {
-      const createdData = await createCase({
-        title: `${newCase.client} - ${newCase.type || 'General'}`,
-        clientName: newCase.client,
-        section: newCase.section,
-        caseType: newCase.type || 'General',
-        court: newCase.court || 'TBD',
-      })
+      // clientName is equivalent to partyName in this form payload
+      const payload = { ...newCaseForm, clientName: newCaseForm.partyName || newCaseForm.title }; 
+      const createdData = await createCase(payload)
       
       if (createdData._id) {
         await fetchCases() // refresh list
-        setNewCase({ client: '', section: '', type: '', court: '' })
+        setNewCaseForm({
+          title: "", court: "", caseType: "", caseNumber: "",
+          caseYear: new Date().getFullYear().toString(), onBehalfOf: "",
+          status: "active", partyName: "", contactNo: "", clientName: "",
+          respondentName: "", section: "", firNumber: "", policeStation: "",
+          adverseAdvocateName: "", adverseAdvocateContact: "", language: "english",
+        })
         setShowNewCase(false)
       }
     } catch (error) {
@@ -320,14 +345,39 @@ export default function Dashboard() {
         .case-card-tag {
           display: inline-flex; align-items: center; gap: 5px;
           padding: 3px 9px; border-radius: 5px; font-size: 10px; font-weight: 700;
-          margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+          text-transform: uppercase; letter-spacing: 0.04em;
           border: 1px solid;
         }
-        .case-card-title {
-          font-size: 13px; font-weight: 700; color: #F5F0E8;
-          margin-bottom: 4px; line-height: 1.4;
+        .case-card-header {
+            display: flex; align-items: flex-start; justify-content: space-between;
+            margin-bottom: 8px;
         }
-        .case-card-court { font-size: 11px; color: #6B6560; margin-bottom: 12px; }
+        .case-card-code {
+            font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 600; color: #C9A84C;
+        }
+        .case-card-title {
+          font-size: 16px; font-weight: 700; color: #F5F0E8;
+          margin-bottom: 4px; line-height: 1.3;
+        }
+        .case-card-court { font-size: 12px; color: #6B6560; margin-bottom: 12px; }
+        .case-card-type-tag {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            background: rgba(255,255,255,0.05); color: #A09890; font-size: 10px;
+            text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .case-card-party {
+            display: flex; align-items: center; gap: 6px; margin-bottom: 2px;
+            color: #C9A84C; font-weight: 600; font-size: 13px;
+        }
+        .case-card-behalf {
+            font-size: 11px; color: #6B6560; margin-bottom: 12px; padding-left: 20px;
+        }
+        .case-card-fir {
+            display: inline-block; padding: 2px 6px; background: rgba(224,112,96,0.1); 
+            color: #E07060; font-size: 10px; border-radius: 4px; border: 1px solid rgba(224,112,96,0.2);
+            font-family: 'DM Mono', monospace;
+        }
         .case-card-footer {
           display: flex; align-items: center; justify-content: space-between;
           padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06);
@@ -366,7 +416,8 @@ export default function Dashboard() {
         }
         .modal {
           background: #151210; border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 16px; padding: 32px; width: 440px;
+          border-radius: 16px; padding: 32px; width: 660px;
+          max-height: 90vh; overflow-y: auto;
           box-shadow: 0 24px 60px rgba(0,0,0,0.5);
         }
         .modal-title {
@@ -374,16 +425,18 @@ export default function Dashboard() {
           font-size: 22px; font-weight: 700; color: #F5F0E8; margin-bottom: 8px;
         }
         .modal-sub { font-size: 13px; color: #6B6560; margin-bottom: 24px; line-height: 1.6; }
-        .modal-input {
+        .form-group { margin-bottom: 14px; }
+        .form-label { display: block; font-size: 11px; font-weight: 700; color: #6B6560; margin-bottom: 6px; letter-spacing: 0.06em; text-transform: uppercase; }
+        .form-input {
           width: 100%; padding: 11px 14px; border-radius: 8px;
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
           color: #F5F0E8; font-size: 14px; font-family: 'DM Sans', sans-serif;
-          outline: none; margin-bottom: 12px;
+          outline: none; transition: border-color 0.2s;
         }
-        .modal-input:focus { border-color: rgba(201,168,76,0.4); }
-        .modal-input::placeholder { color: #3A3530; }
-        .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+        .form-input:focus { border-color: rgba(201,168,76,0.4); background: rgba(201,168,76,0.04); }
+        .form-input::placeholder { color: #3A3530; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
         .modal-btn {
           flex: 1; padding: 11px; border-radius: 8px; font-size: 13px; font-weight: 600;
           cursor: pointer; font-family: 'DM Sans', sans-serif; transition: opacity 0.2s;
@@ -530,18 +583,30 @@ export default function Dashboard() {
                 <div
                   key={c.id}
                   className="case-card"
-                  style={{ borderColor: activeCase === c.id ? col.tagBorder : undefined }}
-                  onClick={() => setActiveCase(c.id)}
+                  style={{ borderColor: activeCase === c.id ? col.tagBorder : undefined, cursor: "pointer" }}
+                  onClick={() => navigate(`/case/${c.id}/details`)}
                 >
                   <div className="case-card-top-bar" style={{ background: `linear-gradient(90deg, ${col.accent}, transparent)` }} />
-                  <div className="case-card-tag" style={{ background: col.tag, color: col.tagText, borderColor: col.tagBorder }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: col.dot, display: 'inline-block' }} />
-                    {c.tag}
+                  
+                  <div className="case-card-header">
+                      <div className="case-card-code">{c.code}</div>
+                      <div className="case-card-tag" style={{ background: col.tag, color: col.tagText, borderColor: col.tagBorder }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: col.dot, display: 'inline-block' }} />
+                        {c.tag}
+                      </div>
                   </div>
-                  <div className="case-card-title">{c.client} · {c.section}</div>
+
+                  <div className="case-card-title">{c.title}</div>
                   <div className="case-card-court">{c.court}</div>
+                  <div className="case-card-type-tag">{c.type}</div>
+                  
+                  <div className="case-card-party">
+                      <span>👤</span> {c.client}
+                  </div>
+                  {c.onBehalfOf && <div className="case-card-behalf">On behalf of {c.onBehalfOf}</div>}
+
                   <div className="case-card-footer">
-                    <div className="case-card-ppc">{c.ppc}</div>
+                    <div className="case-card-ppc">{c.ppc} {c.firNumber && <span className="case-card-fir" style={{marginLeft: 8}}>FIR: {c.firNumber}</span>}</div>
                     <div className="case-card-date">{c.date}</div>
                   </div>
                   <div className="case-card-actions">
@@ -596,13 +661,127 @@ export default function Dashboard() {
         <div className="modal-overlay" onClick={() => setShowNewCase(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-title">Add New Case</div>
-            <div className="modal-sub">Fill in the basic details. You can add more information in the chat.</div>
-            <div className="modal-row">
-              <input className="modal-input" placeholder="Plantiff/Complainant Name" value={newCase.client} onChange={e => setNewCase({ ...newCase, client: e.target.value })} />
-              <input className="modal-input" placeholder="Section (e.g. 302) *" value={newCase.section} onChange={e => setNewCase({ ...newCase, section: e.target.value })} />
+            <div className="modal-sub">Fill in the complete initial master file details.</div>
+            
+            <div className="form-group">
+                <label className="form-label">Case Title *</label>
+                <input className="form-input" placeholder="e.g. State vs John Doe" value={newCaseForm.title} onChange={e => setNewCaseForm({...newCaseForm, title: e.target.value})} />
             </div>
-            <input className="modal-input" placeholder="Case Type (e.g. Murder, Fraud)" value={newCase.type} onChange={e => setNewCase({ ...newCase, type: e.target.value })} />
-            <input className="modal-input" placeholder="Court Name" value={newCase.court} onChange={e => setNewCase({ ...newCase, court: e.target.value })} />
+
+            <div className="form-row">
+                <div className="form-group">
+                    <label className="form-label">Court Name</label>
+                    <input className="form-input" placeholder="e.g. High Court" value={newCaseForm.court} onChange={e => setNewCaseForm({...newCaseForm, court: e.target.value})} />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Case Type</label>
+                    <select className="form-input" value={newCaseForm.caseType} onChange={e => setNewCaseForm({...newCaseForm, caseType: e.target.value})}>
+                        <option value="">Select Type...</option>
+                        <option value="Criminal">Criminal</option>
+                        <option value="Civil">Civil</option>
+                        <option value="Family">Family</option>
+                        <option value="Constitutional">Constitutional</option>
+                        <option value="Labour">Labour</option>
+                        <option value="Revenue">Revenue</option>
+                        <option value="Banking">Banking</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="form-row">
+                <div className="form-group">
+                    <label className="form-label">Case Number</label>
+                    <input className="form-input" placeholder="142" value={newCaseForm.caseNumber} onChange={e => setNewCaseForm({...newCaseForm, caseNumber: e.target.value})} />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Case Year</label>
+                    <select className="form-input" value={newCaseForm.caseYear} onChange={e => setNewCaseForm({...newCaseForm, caseYear: e.target.value})}>
+                        <option value="2027">2027</option>
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="form-row">
+                <div className="form-group">
+                    <label className="form-label">On Behalf Of</label>
+                    <select className="form-input" value={newCaseForm.onBehalfOf} onChange={e => setNewCaseForm({...newCaseForm, onBehalfOf: e.target.value})}>
+                        <option value="">Select...</option>
+                        <option value="Plaintiff">Plaintiff</option>
+                        <option value="Defendant">Defendant</option>
+                        <option value="Petitioner">Petitioner</option>
+                        <option value="Respondent">Respondent</option>
+                        <option value="Complainant">Complainant</option>
+                        <option value="Accused">Accused</option>
+                    </select>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Status</label>
+                    <select className="form-input" value={newCaseForm.status} onChange={e => setNewCaseForm({...newCaseForm, status: e.target.value})}>
+                        <option value="active">Active</option>
+                        <option value="pending">Pending</option>
+                        <option value="urgent">Urgent</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="form-row">
+                <div className="form-group">
+                    <label className="form-label">Party Name (Client)</label>
+                    <input className="form-input" value={newCaseForm.partyName} onChange={e => setNewCaseForm({...newCaseForm, partyName: e.target.value})} />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Contact No.</label>
+                    <input className="form-input" value={newCaseForm.contactNo} onChange={e => setNewCaseForm({...newCaseForm, contactNo: e.target.value})} />
+                </div>
+            </div>
+
+            <div className="form-row">
+                <div className="form-group">
+                    <label className="form-label">Respondent Name</label>
+                    <input className="form-input" value={newCaseForm.respondentName} onChange={e => setNewCaseForm({...newCaseForm, respondentName: e.target.value})} />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Filed U/Sec</label>
+                    <input className="form-input" placeholder="302, 420..." value={newCaseForm.section} onChange={e => setNewCaseForm({...newCaseForm, section: e.target.value})} />
+                </div>
+            </div>
+
+            <div className="form-row">
+                <div className="form-group">
+                    <label className="form-label">FIR Number</label>
+                    <input className="form-input" value={newCaseForm.firNumber} onChange={e => setNewCaseForm({...newCaseForm, firNumber: e.target.value})} />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Police Station</label>
+                    <input className="form-input" value={newCaseForm.policeStation} onChange={e => setNewCaseForm({...newCaseForm, policeStation: e.target.value})} />
+                </div>
+            </div>
+
+            <div className="form-row">
+                <div className="form-group">
+                    <label className="form-label">Adverse Advocate Name</label>
+                    <input className="form-input" value={newCaseForm.adverseAdvocateName} onChange={e => setNewCaseForm({...newCaseForm, adverseAdvocateName: e.target.value})} />
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Adverse Advocate Contact</label>
+                    <input className="form-input" value={newCaseForm.adverseAdvocateContact} onChange={e => setNewCaseForm({...newCaseForm, adverseAdvocateContact: e.target.value})} />
+                </div>
+            </div>
+
+            <div className="form-group" style={{ width: '50%', paddingRight: '7px' }}>
+                <label className="form-label">Language</label>
+                <select className="form-input" value={newCaseForm.language} onChange={e => setNewCaseForm({...newCaseForm, language: e.target.value})}>
+                    <option value="english">English</option>
+                    <option value="urdu">Urdu</option>
+                    <option value="roman">Roman Urdu</option>
+                </select>
+            </div>
+
             <div className="modal-actions">
               <button className="modal-btn cancel" onClick={() => setShowNewCase(false)}>Cancel</button>
               <button className="modal-btn confirm-add" onClick={handleAddCase} disabled={creating} style={{ opacity: creating ? 0.7 : 1 }}>
