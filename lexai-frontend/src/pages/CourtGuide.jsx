@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getCases } from '../services/api'
+import { getCases, getGuide, updateGuide, getGuideVersions, getGuideVersion } from '../services/api'
 
 const GUIDE_DATA = {
   caseCode: 'CR-2024-0042',
@@ -136,16 +136,52 @@ export default function CourtGuide() {
   const [expandedTips,   setExpandedTips]   = useState({})
   const [cases, setCases] = useState([])
   const [currentCase, setCurrentCase] = useState({})
+  const [guideData, setGuideData] = useState(null)
+  const [versions, setVersions] = useState([])
+  const [activeVersionNum, setActiveVersionNum] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [editingSections, setEditingSections] = useState({})
+  const [editedData, setEditedData] = useState({})
+  const [savingVersion, setSavingVersion] = useState(false)
+  const [showNoteModal, setShowNoteModal] = useState(false)
+  const [changeNote, setChangeNote] = useState('')
+  const [toastMessage, setToastMessage] = useState(null)
+  const [bouncingCheck, setBouncingCheck] = useState(null)
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true)
       try {
         const data = await getCases()
         setCases(data)
         const c = data.find(c => String(c._id) === String(id))
         if(c) setCurrentCase(c)
+
+        const vData = await getGuideVersions(id)
+        if (Array.isArray(vData)) setVersions(vData)
+
+        const gData = await getGuide(id)
+        if (gData && gData.openingStatement) {
+          setGuideData(gData)
+          if (gData.versions && gData.versions.length > 0) {
+              const currentVersion = gData.versions[gData.versions.length - 1]
+              setActiveVersionNum(currentVersion.versionNumber)
+              if (Array.isArray(currentVersion.checklist) && currentVersion.checklist.length > 0) {
+                  setChecklist(currentVersion.checklist.map((item, idx) => ({
+                      id: item._id || idx,
+                      text: item.item,
+                      done: item.completed
+                  })))
+              }
+          }
+        } else {
+          setGuideData(null)
+        }
       } catch(err) {
-        console.error("Failed to load cases", err)
+        console.error("Failed to load cases/guide", err)
+        setGuideData(null)
+      } finally {
+        setLoading(false)
       }
     }
     if (id) {
@@ -156,8 +192,99 @@ export default function CourtGuide() {
   // removed static SIDEBAR_CASES
   const STATUS_DOT = { active: '#4CAF7A', done: '#C9A84C', pending: '#7B9FD4', urgent: '#E07060' }
 
-  const toggleCheck = (itemId) => {
-    setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, done: !i.done } : i))
+  const toggleCheck = async (itemId) => {
+    setBouncingCheck(itemId)
+    setTimeout(() => setBouncingCheck(null), 300)
+    const newChecklist = checklist.map(i => i.id === itemId ? { ...i, done: !i.done } : i)
+    setChecklist(newChecklist)
+    
+    if (guideData) {
+        try {
+            const mappedForBackend = newChecklist.map(c => ({
+                item: c.text,
+                completed: c.done
+            }))
+            await updateGuide(id, {
+                openingStatement: guideData.openingStatement,
+                argumentsSection: guideData.argumentsSection,
+                precedentArguments: guideData.precedentArguments,
+                prayer: guideData.prayer,
+                checklist: mappedForBackend,
+                changeNote: "Updated checklist status"
+            })
+        } catch(err) {
+            console.error("Failed to update guide checklist", err)
+        }
+    }
+  }
+
+  const handleVersionClick = async (vNum) => {
+    setActiveVersionNum(vNum)
+    setEditingSections({})
+    setEditedData({})
+    try {
+        const vData = await getGuideVersion(id, vNum)
+        if (vData) {
+            setGuideData(prev => ({
+                ...prev,
+                openingStatement: vData.openingStatement,
+                argumentsSection: vData.argumentsSection,
+                precedentArguments: vData.precedentArguments,
+                prayer: vData.prayer,
+                checklist: vData.checklist
+            }))
+            if (Array.isArray(vData.checklist) && vData.checklist.length > 0) {
+              setChecklist(vData.checklist.map((item, idx) => ({
+                  id: item._id || idx,
+                  text: item.item,
+                  done: item.completed
+              })))
+            }
+        }
+    } catch(err) {
+        console.error("Failed to load version", err)
+    }
+  }
+
+  const handleSaveVersion = async () => {
+    setSavingVersion(true)
+    const currentChecklist = checklist.map(c => ({ item: c.text, completed: c.done }))
+    
+    // Map 'step.id' dynamically checking editedData explicitly aligning to specific backend schema blocks
+    const openingStr = editedData.opening !== undefined ? editedData.opening : guideData?.openingStatement
+    const argsStr = editedData.arguments !== undefined ? editedData.arguments : guideData?.argumentsSection
+    const precStr = editedData.precedents !== undefined ? editedData.precedents : guideData?.precedentArguments
+    const prayerStr = editedData.prayer !== undefined ? editedData.prayer : guideData?.prayer
+
+    try {
+      const res = await updateGuide(id, {
+        openingStatement: openingStr,
+        argumentsSection: argsStr,
+        precedentArguments: precStr,
+        prayer: prayerStr,
+        checklist: currentChecklist,
+        changeNote: changeNote || "Manual edit by lawyer"
+      })
+      
+      if (res && res._id) {
+          setGuideData(res)
+          setVersions(res.versions || [])
+          if (res.versions && res.versions.length > 0) {
+              setActiveVersionNum(res.versions[res.versions.length - 1].versionNumber)
+          }
+      }
+      setEditingSections({})
+      setEditedData({})
+      setShowNoteModal(false)
+      setChangeNote('')
+      const vNum = res?.versions?.[res?.versions?.length - 1]?.versionNumber
+      setToastMessage(`Version ${vNum || ''} saved successfully`)
+      setTimeout(() => setToastMessage(null), 3000)
+    } catch (err) {
+      console.error("Failed to save guide version:", err)
+    } finally {
+      setSavingVersion(false)
+    }
   }
 
   const completedCount = checklist.filter(i => i.done).length
@@ -188,6 +315,17 @@ export default function CourtGuide() {
     document.body.innerHTML = originalBody
     window.location.reload()
   }
+
+  if (loading) return <div style={{ background: '#0A0908', color: '#F5F0E8', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '18px', fontFamily: "'DM Sans', sans-serif" }}><div style={{ fontSize: '24px', marginRight: '12px', animation: 'spin 1s linear infinite' }}>⏳</div><style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>Loading guide...</div>
+  
+  const dynamicSteps = guideData ? [
+    { ...GUIDE_DATA.steps[0], script: guideData.openingStatement || GUIDE_DATA.steps[0].script },
+    { ...GUIDE_DATA.steps[1], id: 'arguments', stage: 'Stage 2 — Arguments', title: 'Arguments Section', script: guideData.argumentsSection || GUIDE_DATA.steps[1].script },
+    { ...GUIDE_DATA.steps[2], id: 'precedents', stage: 'Stage 3 — Precedents', title: 'Precedent Arguments', script: guideData.precedentArguments || GUIDE_DATA.steps[2].script },
+    GUIDE_DATA.steps[3],
+    GUIDE_DATA.steps[4],
+    { ...GUIDE_DATA.steps[5], script: guideData.prayer || GUIDE_DATA.steps[5].script }
+  ] : GUIDE_DATA.steps
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: '#0A0908', minHeight: '100vh', color: '#F5F0E8', display: 'flex' }}>
@@ -221,16 +359,15 @@ export default function CourtGuide() {
         .icon-btn:hover { background: rgba(201,168,76,0.1); color: #C9A84C; }
         .new-case-btn {
           margin: 12px 12px 6px; padding: 10px 14px; border-radius: 9px;
-          background: linear-gradient(135deg, #C9A84C, #A8782A);
-          color: #0A0A0F; font-size: 13px; font-weight: 700;
-          border: none; cursor: pointer; width: calc(100% - 24px);
-          font-family: 'DM Sans', sans-serif;
+          background: linear-gradient(135deg, #C9A84C, #A8782A); color: #0A0A0F;
+          font-size: 13px; font-weight: 700; border: none; cursor: pointer;
+          width: calc(100% - 24px); font-family: 'DM Sans', sans-serif;
           box-shadow: 0 4px 14px rgba(201,168,76,0.25); transition: opacity 0.2s;
         }
         .new-case-btn:hover { opacity: 0.9; }
         .sidebar-section-lbl {
-          padding: 10px 20px 5px; font-size: 10px; font-weight: 700; color: #3A3530;
-          letter-spacing: 0.1em; text-transform: uppercase;
+          padding: 10px 20px 5px; font-size: 10px; font-weight: 700;
+          color: #3A3530; letter-spacing: 0.1em; text-transform: uppercase;
         }
         .case-item {
           padding: 9px 12px; margin: 2px 8px; border-radius: 8px; cursor: pointer;
@@ -256,35 +393,10 @@ export default function CourtGuide() {
         .user-name { font-size: 12px; font-weight: 600; color: #F5F0E8; }
         .user-role { font-size: 10px; color: #6B6560; }
 
-        /* ── MAIN ── */
         .guide-main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-
-        .guide-topbar {
-          padding: 14px 28px; border-bottom: 1px solid rgba(255,255,255,0.07);
-          display: flex; align-items: center; justify-content: space-between;
-          background: rgba(10,9,8,0.95); backdrop-filter: blur(8px);
-          flex-shrink: 0; gap: 16px;
-        }
+        
+        .guide-topbar { height: 70px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; padding: 0 40px; background: #0A0908; flex-shrink: 0; }
         .guide-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: #F5F0E8; }
-        .guide-title span { color: #C9A84C; }
-        .guide-meta { font-size: 11px; color: #6B6560; margin-top: 2px; }
-        .topbar-actions { display: flex; gap: 7px; flex-shrink: 0; }
-        .topbar-btn {
-          padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 500;
-          color: #6B6560; border: 1px solid rgba(255,255,255,0.08);
-          background: rgba(255,255,255,0.02); cursor: pointer;
-          font-family: 'DM Sans', sans-serif; transition: all 0.2s; white-space: nowrap;
-        }
-        .topbar-btn:hover { color: #C9A84C; border-color: rgba(201,168,76,0.25); }
-        .topbar-btn.gold { color: #C9A84C; border-color: rgba(201,168,76,0.3); background: rgba(201,168,76,0.08); }
-        .topbar-btn.gold:hover { background: rgba(201,168,76,0.15); }
-        .dl-btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700;
-          cursor: pointer; border: none; font-family: 'DM Sans', sans-serif;
-          transition: opacity 0.2s, transform 0.2s; white-space: nowrap;
-          display: flex; align-items: center; gap: 6px;
-        }
-        .dl-btn:hover { opacity: 0.88; transform: translateY(-1px); }
         .dl-btn.primary { background: linear-gradient(135deg, #C9A84C, #A8782A); color: #0A0A0F; box-shadow: 0 4px 14px rgba(201,168,76,0.25); }
 
         /* ── BODY ── */
@@ -536,97 +648,177 @@ export default function CourtGuide() {
       <div className="guide-main">
 
         {/* TOPBAR */}
-        <div className="guide-topbar">
+        <div className="guide-topbar" style={{ borderBottom: '1px solid rgba(201,168,76,0.15)' }}>
           <div>
-            <div className="guide-title">Court Guide · <span>{GUIDE_DATA.hearingType}</span></div>
-            <div className="guide-meta">{currentCase.clientName || GUIDE_DATA.client} · {currentCase.section || GUIDE_DATA.section} · {currentCase.court || GUIDE_DATA.court} · {GUIDE_DATA.generatedAt}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <span style={{ fontFamily: "'Playfair Display', serif", color: '#fff', fontSize: '20px', fontWeight: 700 }}>Court Guide</span>
+              <span style={{ color: '#C9A84C', fontSize: '20px', fontWeight: 700 }}>· {GUIDE_DATA.hearingType}</span>
+            </div>
+            <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, color: '#F5F0E8' }}>{currentCase.clientName || 'Loading...'}</span>
+              <span style={{ color: 'rgba(201,168,76,0.5)', margin: '0 6px' }}>·</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", color: '#C9A84C' }}>{currentCase.caseCode || 'N/A'}</span>
+              <span style={{ color: 'rgba(201,168,76,0.5)', margin: '0 6px' }}>·</span>
+              <span style={{ color: '#6B6560' }}>{currentCase.court || 'N/A'}</span>
+            </div>
           </div>
-          <div className="topbar-actions">
-            <button className="topbar-btn" onClick={() => navigate(`/case/${id}/chat`)}>💬 Chat</button>
-            <button className="topbar-btn gold" onClick={() => navigate(`/case/${id}/research`)}>📄 Research</button>
-            <button className="dl-btn primary" onClick={handleDownloadPDF}>⬇ Download PDF</button>
+          <div className="topbar-actions" style={{ display: 'flex', gap: '12px' }}>
+            <button onClick={() => navigate(`/case/${id}/chat`)}
+              style={{
+                padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(255,255,255,0.03)', color: '#F5F0E8', fontSize: '12px', fontWeight: 700,
+                fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+            >
+              💬 Back to Chat
+            </button>
+            <button onClick={() => navigate(`/case/${id}/research`)}
+              style={{
+                padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(201,168,76,0.2)',
+                background: 'rgba(201,168,76,0.1)', color: '#C9A84C', fontSize: '12px', fontWeight: 700,
+                fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(201,168,76,0.4)'; e.currentTarget.style.background = 'rgba(201,168,76,0.15)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(201,168,76,0.2)'; e.currentTarget.style.background = 'rgba(201,168,76,0.1)'; }}
+            >
+              📄 Legal Research
+            </button>
           </div>
         </div>
 
         {/* BODY */}
         <div className="guide-body">
-
-          {/* STEP NAV */}
-          <div className="step-nav">
-            {GUIDE_DATA.steps.map((step, i) => (
-              <>
-                <button
-                  key={step.id}
-                  className={`step-nav-btn ${activeStep === step.id ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveStep(step.id)
-                    document.getElementById(`step-${step.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  }}
-                  title={step.title}
-                >
-                  {step.icon}
-                </button>
-                {i < GUIDE_DATA.steps.length - 1 && <div key={`conn-${i}`} className="step-nav-connector" />}
-              </>
-            ))}
-          </div>
-
-          {/* CONTENT */}
-          <div className="guide-content">
-
-            {/* Hidden print content */}
-            <div id="guide-print-content" style={{ display: 'none' }}>
-              {GUIDE_DATA.steps.map((step, i) => (
-                <div key={step.id} className="print-step">
-                  <div className="print-stage">{step.stage}</div>
-                  <h2>{step.title}</h2>
-                  <div className="print-objective">{step.objective}</div>
-                  <ul>{step.instructions.map((ins, j) => <li key={j}>{ins}</li>)}</ul>
-                  <div className="print-script">{step.script}</div>
-                  <div className="print-tip">💡 Tip: {step.tips}</div>
-                  {i < GUIDE_DATA.steps.length - 1 && <hr />}
-                </div>
-              ))}
+          {!guideData ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '20px' }}>🎤</div>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', fontWeight: 700, color: '#C9A84C', marginBottom: '12px' }}>
+                Court Guide
+              </div>
+              <div style={{ fontSize: '14px', color: '#A09890', maxWidth: '400px', textAlign: 'center', lineHeight: '1.6', marginBottom: '32px' }}>
+                No Court Guide yet. Go to the Research page and click Generate Court Guide.
+              </div>
+              <button 
+                onClick={() => navigate(`/case/${id}/research`)} 
+                style={{
+                  padding: '14px 28px', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                  background: 'linear-gradient(135deg, #C9A84C, #A8782A)',
+                  color: '#0A0A0F', border: 'none', fontFamily: "'DM Sans', sans-serif",
+                  boxShadow: '0 8px 24px rgba(201,168,76,0.3)', transition: 'all 0.2s',
+                  display: 'flex', alignItems: 'center', gap: '8px'
+                }}
+              >
+                📄 Go to Research
+              </button>
             </div>
-
-            {/* Visible step cards */}
-            {GUIDE_DATA.steps.map((step) => {
-              const isActive   = activeStep === step.id
-              const scriptOpen = expandedScript[step.id]
-              const tipOpen    = expandedTips[step.id]
-              return (
-                <div
-                  key={step.id}
-                  id={`step-${step.id}`}
-                  className={`step-card ${isActive ? 'active-card' : ''}`}
-                >
-                  {/* CARD HEAD */}
-                  <div className="step-card-head"
-                    onClick={() => setActiveStep(isActive ? null : step.id)}>
-                    <div className="step-number-circle" style={{
-                      background: isActive ? `${step.tagColor}18` : 'rgba(255,255,255,0.03)',
-                      borderColor: isActive ? `${step.tagColor}40` : 'rgba(255,255,255,0.08)',
-                      color: isActive ? step.tagColor : '#6B6560',
-                    }}>
+          ) : (
+            <>
+              {/* STEP NAV */}
+              <div className="step-nav">
+                {dynamicSteps.map((step, i) => (
+                  <div key={step.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <button
+                      className={`step-nav-btn ${activeStep === step.id ? 'active' : ''}`}
+                      onClick={() => {
+                        setActiveStep(step.id)
+                        document.getElementById(`step-${step.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }}
+                      title={step.title}
+                    >
                       {step.icon}
+                    </button>
+                    {i < dynamicSteps.length - 1 && <div className="step-nav-connector" />}
+                  </div>
+                ))}
+              </div>
+
+              {/* CONTENT */}
+              <div className="guide-content">
+
+                {/* Hidden print content */}
+                <div id="guide-print-content" style={{ display: 'none' }}>
+                  {dynamicSteps.map((step, i) => (
+                    <div key={step.id} className="print-step">
+                      <div className="print-stage">{step.stage}</div>
+                      <h2>{step.title}</h2>
+                      <div className="print-objective">{step.objective}</div>
+                      <ul>{step.instructions.map((ins, j) => <li key={j}>{ins}</li>)}</ul>
+                      <div className="print-script">{step.script}</div>
+                      <div className="print-tip">💡 Tip: {step.tips}</div>
+                      {i < dynamicSteps.length - 1 && <hr />}
                     </div>
-                    <div className="step-head-right">
-                      <div className="step-stage-label" style={{ color: step.tagColor }}>{step.stage}</div>
-                      <div className="step-heading">{step.title}</div>
-                      <div className="step-objective">{step.objective}</div>
+                  ))}
+                </div>
+
+                {/* Visible step cards */}
+                {dynamicSteps.map((step, stepIdx) => {
+                  const isActive   = activeStep === step.id
+                  const scriptOpen = expandedScript[step.id]
+                  const tipOpen    = expandedTips[step.id]
+                  return (
+                    <div
+                      key={step.id}
+                      id={`step-${step.id}`}
+                      className="section-card"
+                      style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        border: isActive ? '1px solid rgba(201,168,76,0.25)' : '1px solid rgba(255,255,255,0.07)',
+                        borderRadius: '14px', overflow: 'hidden', marginBottom: '16px',
+                        transition: 'transform 0.2s, border-color 0.2s', scrollMarginTop: '20px',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; if (!isActive) e.currentTarget.style.borderColor = 'rgba(201,168,76,0.2)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; if (!isActive) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; }}
+                    >
+                  {/* CARD HEAD */}
+                  <div
+                    onClick={() => setActiveStep(isActive ? null : step.id)}
+                    style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '16px 20px', cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                      <div style={{
+                        width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
+                        background: isActive ? 'linear-gradient(135deg, #C9A84C, #A8782A)' : 'rgba(201,168,76,0.12)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '14px', fontWeight: 800,
+                        color: isActive ? '#0A0A0F' : '#C9A84C',
+                        transition: 'all 0.25s',
+                      }}>
+                        {stepIdx + 1}
+                      </div>
+                      <div>
+                        <div style={{
+                          fontFamily: "'Playfair Display', serif", fontSize: '16px', fontWeight: 700,
+                          color: '#F5F0E8', marginBottom: '3px',
+                        }}>{step.title}</div>
+                        <div style={{ fontSize: '12px', color: '#6B6560', lineHeight: 1.5 }}>{step.objective}</div>
+                      </div>
                     </div>
-                    <div className="step-tag" style={{
-                      color: step.tagColor,
-                      background: `${step.tagColor}18`,
-                      borderColor: `${step.tagColor}35`,
-                    }}>{step.tag}</div>
-                    <div className={`step-chevron ${isActive ? 'open' : ''}`}>▼</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                      <span style={{
+                        padding: '4px 12px', borderRadius: '20px', fontSize: '10px', fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                        color: step.tagColor,
+                        background: `${step.tagColor}18`,
+                        border: `1px solid ${step.tagColor}35`,
+                      }}>{step.tag}</span>
+                      <span style={{
+                        fontSize: '12px', color: '#6B6560', transition: 'transform 0.25s',
+                        display: 'inline-block', transform: isActive ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}>▼</span>
+                    </div>
                   </div>
 
                   {/* CARD BODY */}
-                  {isActive && (
-                    <div className="step-body">
-                      <div className="step-instructions">
+                  <div className={`step-body stage-body ${isActive ? 'expanded' : ''}`}>
+                    <div className="step-instructions">
                         <div className="step-instr-title">📌 Instructions</div>
                         {step.instructions.map((ins, i) => (
                           <div key={i} className="instr-item">
@@ -636,37 +828,108 @@ export default function CourtGuide() {
                         ))}
                       </div>
 
-                      {/* SCRIPT TOGGLE */}
-                      <div className="script-toggle">
-                        <div className="script-toggle-head"
-                          onClick={() => setExpandedScript(p => ({ ...p, [step.id]: !p[step.id] }))}>
-                          <div className="script-toggle-label">
-                            🎤 <span>What to Say — Court Script</span>
+                      {/* COURT SCRIPT */}
+                      <div style={{ marginBottom: '10px' }}>
+                        {/* Header row */}
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          marginBottom: scriptOpen ? '10px' : '0', cursor: 'pointer',
+                        }}
+                          onClick={() => setExpandedScript(p => ({ ...p, [step.id]: !p[step.id] }))}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '13px' }}>✒</span>
+                            <span style={{
+                              fontSize: '10px', fontWeight: 700, color: '#C9A84C',
+                              textTransform: 'uppercase', letterSpacing: '0.08em',
+                            }}>Court Script</span>
+                            <span style={{
+                              fontSize: '11px', color: '#C9A84C', transition: 'transform 0.25s',
+                              display: 'inline-block', transform: scriptOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                              marginLeft: '4px',
+                            }}>▼</span>
                           </div>
-                          <span style={{ fontSize: 11, color: '#C9A84C', transition: 'transform 0.2s', display: 'inline-block', transform: scriptOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedScript(p => ({ ...p, [step.id]: true }))
+                              setEditingSections(prev => ({ ...prev, [step.id]: !prev[step.id] }))
+                            }}
+                            style={{
+                              background: 'transparent', border: 'none', cursor: 'pointer',
+                              fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px',
+                              color: editingSections[step.id] ? '#4CAF7A' : '#6B6560',
+                              transition: 'color 0.2s',
+                            }}
+                          >
+                            {editingSections[step.id] ? '✓ Done' : '✏ Edit'}
+                          </button>
                         </div>
+
+                        {/* Script body */}
                         {scriptOpen && (
-                          <div className="script-body">
-                            {step.script}
+                          <div>
+                            {editingSections[step.id] ? (
+                              <textarea
+                                autoFocus
+                                value={editedData[step.id] !== undefined ? editedData[step.id] : step.script}
+                                onChange={(e) => setEditedData({ ...editedData, [step.id]: e.target.value })}
+                                style={{
+                                  width: '100%', minHeight: '140px',
+                                  background: '#0A0908', border: '1px solid rgba(201,168,76,0.3)',
+                                  borderLeft: '3px solid #C9A84C', borderRadius: '0 8px 8px 0',
+                                  color: '#D4CFC8', padding: '18px 22px',
+                                  fontFamily: "'DM Mono', monospace", fontSize: '13px', lineHeight: '1.85',
+                                  resize: 'vertical', outline: 'none',
+                                }}
+                              />
+                            ) : (
+                              <div style={{
+                                background: '#0A0908', borderLeft: '3px solid #C9A84C',
+                                borderRadius: '0 8px 8px 0', padding: '18px 22px',
+                                fontFamily: "'DM Mono', monospace", fontSize: '13px',
+                                lineHeight: 1.85, color: '#D4CFC8', whiteSpace: 'pre-wrap',
+                              }}>
+                                {editedData[step.id] !== undefined ? editedData[step.id] : step.script}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
 
-                      {/* TIP TOGGLE */}
-                      <div className="tip-toggle" style={{ marginTop: 10 }}>
-                        <div className="tip-toggle-head"
-                          onClick={() => setExpandedTips(p => ({ ...p, [step.id]: !p[step.id] }))}>
-                          <div className="tip-toggle-label">
-                            💡 <span>Advocate Tip</span>
+                      {/* ADVOCATE TIP */}
+                      <div style={{ marginTop: '10px' }}>
+                        <div
+                          onClick={() => setExpandedTips(p => ({ ...p, [step.id]: !p[step.id] }))}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            cursor: 'pointer', marginBottom: tipOpen ? '10px' : '0',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '13px' }}>💡</span>
+                            <span style={{
+                              fontSize: '11px', fontWeight: 700, color: '#F59E0B',
+                              textTransform: 'uppercase', letterSpacing: '0.07em',
+                            }}>Advocate Tip</span>
                           </div>
-                          <span style={{ fontSize: 11, color: '#7B9FD4', transition: 'transform 0.2s', display: 'inline-block', transform: tipOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+                          <span style={{
+                            fontSize: '11px', color: '#F59E0B', transition: 'transform 0.25s',
+                            display: 'inline-block', transform: tipOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          }}>▼</span>
                         </div>
                         {tipOpen && (
-                          <div className="tip-body">{step.tips}</div>
+                          <div style={{
+                            background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.18)',
+                            borderRadius: '10px', padding: '14px 18px',
+                          }}>
+                            <div style={{
+                              fontStyle: 'italic', fontSize: '13px', color: '#A09890', lineHeight: 1.7,
+                            }}>{step.tips}</div>
+                          </div>
                         )}
                       </div>
                     </div>
-                  )}
                 </div>
               )
             })}
@@ -675,29 +938,46 @@ export default function CourtGuide() {
           {/* RIGHT PANEL */}
           <div className="right-panel">
 
-            {/* PROGRESS RING */}
+            {/* HEARING READINESS CARD */}
             <div className="panel-title">Hearing Readiness</div>
-            <div className="progress-ring-wrap">
-              <svg width="80" height="80" viewBox="0 0 80 80">
-                <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6"/>
-                <circle cx="40" cy="40" r="32" fill="none"
-                  stroke="#C9A84C" strokeWidth="6"
-                  strokeDasharray={`${2 * Math.PI * 32}`}
-                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - progressPct / 100)}`}
+            <div style={{
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+              borderRadius: '14px', padding: '24px', textAlign: 'center', marginBottom: '16px',
+            }}>
+              <svg width="120" height="120" viewBox="0 0 120 120">
+                <defs>
+                  <linearGradient id="readinessGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#C9A84C" />
+                    <stop offset="100%" stopColor="#4CAF7A" />
+                  </linearGradient>
+                </defs>
+                {/* Background track */}
+                <circle cx="60" cy="60" r="50" fill="none"
+                  stroke="rgba(255,255,255,0.08)" strokeWidth="8"
+                />
+                {/* Progress arc */}
+                <circle cx="60" cy="60" r="50" fill="none"
+                  stroke="url(#readinessGrad)" strokeWidth="8"
                   strokeLinecap="round"
-                  transform="rotate(-90 40 40)"
+                  strokeDasharray={`${2 * Math.PI * 50}`}
+                  strokeDashoffset={`${2 * Math.PI * 50 * (1 - progressPct / 100)}`}
+                  transform="rotate(-90 60 60)"
                   style={{ transition: 'stroke-dashoffset 0.5s ease' }}
                 />
-                <text x="40" y="37" textAnchor="middle" fill="#C9A84C"
-                  style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 700 }}>
+                {/* Percentage text */}
+                <text x="60" y="55" textAnchor="middle" fill="#F5F0E8"
+                  style={{ fontFamily: "'Playfair Display', serif", fontSize: '24px', fontWeight: 700 }}>
                   {progressPct}%
                 </text>
-                <text x="40" y="52" textAnchor="middle" fill="#6B6560"
-                  style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 9 }}>
+                {/* Ready label */}
+                <text x="60" y="74" textAnchor="middle" fill="#6B6560"
+                  style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '11px' }}>
                   Ready
                 </text>
               </svg>
-              <div className="ring-label">{completedCount} of {checklist.length} tasks done</div>
+              <div style={{ fontSize: '12px', color: '#6B6560', marginTop: '12px' }}>
+                {completedCount} of {checklist.length} tasks done
+              </div>
             </div>
 
             <div className="panel-divider" />
@@ -706,38 +986,240 @@ export default function CourtGuide() {
             <div className="panel-title">Pre-Hearing Checklist</div>
             {checklist.map(item => (
               <div key={item.id}
-                className={`checklist-item ${item.done ? 'checked' : ''}`}
-                onClick={() => toggleCheck(item.id)}>
-                <div className="check-box">{item.done ? '✓' : ''}</div>
-                <div className="check-text">{item.text}</div>
-              </div>
-            ))}
-
-            <div className="panel-divider" />
-
-            {/* STEPS OUTLINE */}
-            <div className="panel-title">Guide Steps</div>
-            {GUIDE_DATA.steps.map(step => (
-              <div key={step.id}
-                className={`step-outline-item ${activeStep === step.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveStep(step.id)
-                  document.getElementById(`step-${step.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                onClick={() => toggleCheck(item.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '14px',
+                  padding: '12px 16px', cursor: 'pointer',
+                  borderBottom: '1px solid rgba(255,255,255,0.05)',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <div className={bouncingCheck === item.id ? 'checkbox-bounce' : ''} style={{
+                  width: '20px', height: '20px', borderRadius: '6px', flexShrink: 0,
+                  background: item.done ? 'linear-gradient(135deg, #C9A84C, #A8782A)' : 'transparent',
+                  border: item.done ? 'none' : '1.5px solid rgba(255,255,255,0.2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.15s ease',
                 }}>
-                <span className="step-outline-icon">{step.icon}</span>
-                <span className="step-outline-text">{step.title}</span>
+                  {item.done && <span style={{ fontSize: '12px', color: '#fff', fontWeight: 800, lineHeight: 1 }}>✓</span>}
+                </div>
+                <span style={{
+                  fontSize: '13px', lineHeight: 1.4,
+                  color: item.done ? '#6B6560' : '#D4CFC8',
+                  textDecoration: item.done ? 'line-through' : 'none',
+                  transition: 'color 0.2s',
+                }}>{item.text}</span>
               </div>
             ))}
 
             <div className="panel-divider" />
+            
+            {/* VERSIONS */}
+            <div className="panel-title">Version History</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+              {versions.slice().reverse().map(v => {
+                const isActive = activeVersionNum === v.versionNumber;
+                return (
+                  <div key={v.versionNumber}
+                    onClick={() => handleVersionClick(v.versionNumber)}
+                    style={{
+                      padding: '12px 16px', borderRadius: '10px', cursor: 'pointer',
+                      background: isActive ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.03)',
+                      border: isActive ? '1px solid rgba(201,168,76,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                      borderLeft: isActive ? '3px solid #C9A84C' : '1px solid rgba(255,255,255,0.07)',
+                      transition: 'all 0.2s'
+                    }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{
+                        fontFamily: "'DM Mono', monospace", fontSize: '11px', fontWeight: 700,
+                        color: isActive ? '#0A0A0F' : '#C9A84C',
+                        background: isActive ? 'linear-gradient(135deg, #C9A84C, #A8782A)' : 'rgba(201,168,76,0.12)',
+                        border: isActive ? 'none' : '1px solid rgba(201,168,76,0.2)',
+                        padding: '2px 8px', borderRadius: '4px'
+                      }}>V{v.versionNumber}</span>
+                      <span style={{ fontSize: '10px', color: '#6B6560' }}>
+                        {new Date(v.savedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
+                        {new Date(v.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#A09890', fontStyle: 'italic', lineHeight: 1.4 }}>{v.changeNote || 'Manual update'}</div>
+                  </div>
+                );
+              })}
+            </div>
 
-            <button className="panel-btn primary" onClick={handleDownloadPDF}>⬇ Download PDF</button>
-            <button className="panel-btn secondary" onClick={() => navigate(`/case/${id}/research`)}>📄 Research</button>
-            <button className="panel-btn secondary" onClick={() => navigate('/dashboard')}>🏠 Dashboard</button>
-          </div>
+            {Object.keys(editedData).length > 0 && (
+              <button 
+                onClick={() => setShowNoteModal(true)}
+                style={{
+                  width: '100%', padding: '10px', borderRadius: '8px', cursor: 'pointer',
+                  background: 'linear-gradient(135deg, #4CAF7A, #2E7D32)', border: 'none', color: '#fff',
+                  fontWeight: 600, fontFamily: "'DM Sans', sans-serif", fontSize: '12px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  boxShadow: '0 4px 12px rgba(76,175,122,0.2)', marginBottom: '16px'
+                }}>
+                💾 Save Changes
+              </button>
+            )}
 
+            <div className="panel-divider" />
+
+                {/* STEPS OUTLINE */}
+                <div className="panel-title">Guide Steps</div>
+                {dynamicSteps.map(step => (
+                  <div key={step.id}
+                    className={`step-outline-item ${activeStep === step.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveStep(step.id)
+                      document.getElementById(`step-${step.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }}>
+                    <span className="step-outline-icon">{step.icon}</span>
+                    <span className="step-outline-text">{step.title}</span>
+                  </div>
+                ))}
+
+                <div className="panel-divider" />
+
+                <button 
+                  onClick={handleDownloadPDF}
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: '8px', cursor: 'pointer',
+                    background: 'linear-gradient(135deg, #C9A84C, #A8782A)', border: 'none', color: '#0A0A0F',
+                    fontWeight: 700, fontFamily: "'DM Sans', sans-serif", fontSize: '13px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    boxShadow: '0 4px 14px rgba(201,168,76,0.25)', marginBottom: '8px', transition: 'opacity 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                >
+                  ⬇ Download PDF
+                </button>
+                <button
+                  onClick={() => navigate(`/case/${id}/research`)}
+                  style={{
+                    width: '100%', padding: '10px', borderRadius: '8px', cursor: 'pointer',
+                    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)', color: '#6B6560',
+                    fontWeight: 600, fontFamily: "'DM Sans', sans-serif", fontSize: '12px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    marginBottom: '8px', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(201,168,76,0.3)'; e.currentTarget.style.color = '#C9A84C'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)'; e.currentTarget.style.color = '#6B6560'; }}
+                >
+                  📄 Back to Research
+                </button>
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  style={{
+                    width: '100%', padding: '10px', borderRadius: '8px', cursor: 'pointer',
+                    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)', color: '#6B6560',
+                    fontWeight: 600, fontFamily: "'DM Sans', sans-serif", fontSize: '12px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    marginBottom: '8px', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(201,168,76,0.3)'; e.currentTarget.style.color = '#C9A84C'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)'; e.currentTarget.style.color = '#6B6560'; }}
+                >
+                  🏠 Back to Dashboard
+                </button>
+              </div>
+
+            </>
+          )}
         </div>
       </div>
+      
+      {/* GLOBAL TOAST */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed', bottom: '32px', right: '32px', zIndex: 9999,
+          background: '#4CAF7A', color: '#fff', padding: '12px 24px',
+          borderRadius: '8px', fontSize: '14px', fontWeight: 500,
+          boxShadow: '0 8px 24px rgba(76, 175, 122, 0.4)',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+          fontFamily: "'DM Sans', sans-serif"
+        }}>
+          <span>✓</span> {toastMessage}
+        </div>
+      )}
+
+      {/* SAVE VERSION MODAL */}
+      {showNoteModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000
+        }}>
+          <div style={{
+            background: '#1a1a1a', border: '1px solid #333', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%'
+          }}>
+            <h3 style={{ margin: '0 0 8px', color: '#fff' }}>Save Changes</h3>
+            <p style={{ fontSize: '13px', color: '#aaa', marginBottom: '20px' }}>Enter a short note describing your edits.</p>
+            <textarea
+              autoFocus
+              value={changeNote}
+              onChange={e => setChangeNote(e.target.value)}
+              placeholder="e.g. Refined closing prayer arguments..."
+              style={{
+                width: '100%', height: '80px', background: '#0a0a0a', border: '1px solid #333',
+                color: '#fff', padding: '12px', borderRadius: '8px', marginBottom: '20px',
+                fontFamily: "'DM Sans', sans-serif", resize: 'none'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => setShowNoteModal(false)}
+                disabled={savingVersion}
+                style={{
+                  padding: '8px 16px', background: 'transparent', border: '1px solid #555', color: '#aaa',
+                  borderRadius: '6px', cursor: 'pointer'
+                }}>Cancel</button>
+              <button 
+                onClick={handleSaveVersion}
+                disabled={savingVersion}
+                style={{
+                  padding: '8px 16px', background: '#4CAF7A', border: 'none', color: '#fff', fontWeight: 600,
+                  borderRadius: '6px', cursor: savingVersion ? 'wait' : 'pointer'
+                }}>
+                {savingVersion ? 'Saving...' : 'Save Version'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        @keyframes sectionReveal {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0);   }
+        }
+        .section-card { animation: sectionReveal 0.4s ease forwards; opacity: 0; }
+        .section-card:nth-child(1) { animation-delay: 0.05s; }
+        .section-card:nth-child(2) { animation-delay: 0.10s; }
+        .section-card:nth-child(3) { animation-delay: 0.15s; }
+        .section-card:nth-child(4) { animation-delay: 0.20s; }
+        .section-card:nth-child(5) { animation-delay: 0.25s; }
+        .section-card:nth-child(6) { animation-delay: 0.30s; }
+      
+        @keyframes checkBounce {
+          0%   { transform: scale(1);    }
+          40%  { transform: scale(0.85); }
+          70%  { transform: scale(1.1);  }
+          100% { transform: scale(1);    }
+        }
+        .checkbox-bounce { animation: checkBounce 0.2s ease; }
+      
+        @keyframes barFill { from { width: 0%; } }
+        .progress-bar-fill { animation: barFill 0.8s ease-out forwards; }
+      
+        .stage-body          { max-height: 0;      overflow: hidden;
+                               transition: max-height 0.35s ease; }
+        .stage-body.expanded { max-height: 2000px; }
+      `}</style>
     </div>
   )
 }

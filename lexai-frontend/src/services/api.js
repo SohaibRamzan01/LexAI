@@ -157,14 +157,91 @@ export const getResearch = async (caseId) => {
         method: "GET",
         headers: getHeaders()
     });
+    if (!res.ok) throw new Error(await res.text());
     return res.json();
 };
 
 export const generateResearch = async (caseId) => {
-    const res = await fetch(`${BASE_URL}/research/${caseId}`, {
+    const res = await fetch(`${BASE_URL}/research/${caseId}/generate`, {
         method: "POST",
         headers: getHeaders()
     });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const updateResearch = async (caseId, data) => {
+    const res = await fetch(`${BASE_URL}/research/${caseId}`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const getResearchVersions = async (caseId) => {
+    const res = await fetch(`${BASE_URL}/research/${caseId}/versions`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const getResearchVersion = async (caseId, versionNum) => {
+    const res = await fetch(`${BASE_URL}/research/${caseId}/versions/${versionNum}`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+// COURT GUIDE
+export const getGuide = async (caseId) => {
+    const res = await fetch(`${BASE_URL}/guide/${caseId}`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const generateGuide = async (caseId) => {
+    const res = await fetch(`${BASE_URL}/guide/${caseId}/generate`, {
+        method: "POST",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const updateGuide = async (caseId, payload) => {
+    const res = await fetch(`${BASE_URL}/guide/${caseId}`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const getGuideVersions = async (caseId) => {
+    const res = await fetch(`${BASE_URL}/guide/${caseId}/versions`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const getGuideVersion = async (caseId, versionNum) => {
+    const res = await fetch(`${BASE_URL}/guide/${caseId}/versions/${versionNum}`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
     return res.json();
 };
 

@@ -9,6 +9,10 @@ const casesRoutes = require("./routes/cases");
 const chatRoutes = require("./routes/chat");
 const researchRoutes = require("./routes/research");
 const feesRoutes = require("./routes/fees");
+const guideRoutes = require("./routes/guide");
+
+// Load Models
+const CourtGuide = require("./models/CourtGuide");
 
 const app = express();
 
@@ -30,6 +34,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/cases", casesRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/research", researchRoutes);
+app.use("/api/guide", guideRoutes);
 app.use("/api/fees", feesRoutes);
 
 // Start Server

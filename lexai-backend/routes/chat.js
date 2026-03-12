@@ -12,10 +12,13 @@ router.use(protect);
 // @access  Private
 router.post("/:caseId", async (req, res) => {
     const { caseId } = req.params;
-    const { text, language = "en" } = req.body;
+    const { text, message, language = "en" } = req.body;
+    
+    // Support both 'text' and 'message' based on frontend integration parameters
+    const msgContent = message || text;
 
-    if (!text) {
-        return res.status(400).json({ message: "Message text is required" });
+    if (!msgContent) {
+        return res.status(400).json({ message: "Message content is required" });
     }
 
     try {
@@ -34,28 +37,53 @@ router.post("/:caseId", async (req, res) => {
             parts: [{ text: msg.text }],
         }));
 
-        // 4. Send the query
-        const aiResponseText = await sendLegalQuery(history, language, text);
+        let aiFullResponse = "";
+        let researchDetected = false;
 
-        // 5. Save BOTH the User's message and the AI's response to your Database
+        // Run prompt through the model with system instructions
+        const responseText = await sendLegalQuery(history, language, msgContent);
+
+        // Check if the AI has hit the special output marker
+        if (responseText.includes("APPLICABLE LAW") || 
+            responseText.includes("RESEARCH COMPLETE") || 
+            responseText.includes("--- RESEARCH COMPLETE")) {
+            researchDetected = true;
+        }
+
+        // Save USER message first
         const userMsg = await Message.create({
             case: caseId,
             role: "user",
-            text: text,
+            text: msgContent, // Use msgContent here
             language: language,
         });
 
         const aiMsg = await Message.create({
             case: caseId,
             role: "ai",
-            text: aiResponseText,
+            text: responseText, // Use responseText from the model
             language: language,
         });
+
+        const RESEARCH_MARKERS = [
+            "APPLICABLE LAW",
+            "BAIL GROUNDS",
+            "DEFENSE STRATEGY",
+            "COURT SCRIPT",
+        ];
+
+        researchDetected = RESEARCH_MARKERS.every(marker =>
+            responseText.toUpperCase().includes(marker)
+        );
 
         // 8. Return the AI's response to frontend
         res.status(201).json({
             userMessage: userMsg,
             aiMessage: aiMsg,
+            message: responseText,
+            researchDetected: researchDetected,
+            researchContent: researchDetected ? responseText : null,
+            messageId: aiMsg._id,
         });
     } catch (error) {
         console.error("Chat API Error:", error);

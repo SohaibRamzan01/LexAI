@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getCases, getResearch, generateResearch } from '../services/api'
+import { getCases, getResearch, generateResearch, getResearchVersions, getResearchVersion, generateGuide } from '../services/api'
+import renderLegalText from '../utils/renderLegalText'
 
 const STATUS_DOT = { active: '#4CAF7A', done: '#C9A84C', pending: '#7B9FD4', urgent: '#E07060' }
 
@@ -9,8 +10,18 @@ const OUTLINE = [
   { id: 'bail',        label: 'Bail Grounds',          icon: '🔓' },
   { id: 'precedents',  label: 'Case Precedents',       icon: '📚' },
   { id: 'defense',     label: 'Defense Strategy',      icon: '🛡' },
+  { id: 'script',      label: 'Court Script',          icon: '🎤' },
   { id: 'constitution',label: 'Constitutional Rights', icon: '📜' },
 ]
+
+const SECTION_COLORS = {
+  law:          '#1565C0',
+  bail:         '#E65100',
+  precedents:   '#4A148C',
+  defense:      '#1B5E20',
+  script:       '#C9A84C',
+  constitution: '#006064',
+}
 
 export default function Research() {
   const navigate = useNavigate()
@@ -19,8 +30,18 @@ export default function Research() {
   const [expandedItems, setExpandedItems] = useState({})
   const [cases, setCases] = useState([])
   const [researchData, setResearchData] = useState(null)
+  const [versions, setVersions] = useState([])
+  const [activeVersionNum, setActiveVersionNum] = useState(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [editingSections, setEditingSections] = useState({})
+  const [editedData, setEditedData] = useState({})
+  const [savingVersion, setSavingVersion] = useState(false)
+  const [showNoteModal, setShowNoteModal] = useState(false)
+  const [changeNote, setChangeNote] = useState('')
+  const [toastMessage, setToastMessage] = useState(null)
+  const [showGuideModal, setShowGuideModal] = useState(false)
+  const [generatingGuide, setGeneratingGuide] = useState(false)
   const contentRef = useRef(null)
 
   const loadData = async () => {
@@ -31,8 +52,22 @@ export default function Research() {
 
       if (id) {
         const rData = await getResearch(id)
-        if (rData && rData.sections) {
+        const vData = await getResearchVersions(id)
+        if (Array.isArray(vData)) setVersions(vData)
+
+        if (rData && rData.applicableLaw) {
+            rData.sections = [
+              { id: 'law',          icon: '⚖', title: 'Applicable Law', content: rData.applicableLaw },
+              { id: 'bail',         icon: '🔓', title: 'Bail Grounds', content: rData.bailGrounds },
+              { id: 'precedents',   icon: '📚', title: 'Case Precedents', precedents: rData.precedents },
+              { id: 'defense',      icon: '🛡', title: 'Defense Strategy', content: rData.defenseStrategy },
+              { id: 'script',       icon: '🎤', title: 'Court Script', content: rData.courtScript },
+              { id: 'constitution', icon: '📜', title: 'Constitutional Rights', content: rData.constitutionalRights },
+            ]
             setResearchData(rData)
+            if (Array.isArray(vData) && vData.length > 0) {
+              setActiveVersionNum(vData[vData.length - 1].versionNumber)
+            }
         } else {
             setResearchData(null) // No research generated yet
         }
@@ -53,11 +88,103 @@ export default function Research() {
     setGenerating(true)
     try {
       const gData = await generateResearch(id)
-      setResearchData(gData)
+      loadData() // Re-fetch the full set including updated versions panel!
     } catch (err) {
       console.error("Failed to generate research:", err)
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const handleVersionClick = async (versionNum) => {
+    setActiveVersionNum(versionNum)
+    try {
+      const vData = await getResearchVersion(id, versionNum)
+      if (vData && vData.applicableLaw) {
+          vData.sections = [
+            { id: 'law',          icon: '⚖', title: 'Applicable Law', content: vData.applicableLaw },
+            { id: 'bail',         icon: '🔓', title: 'Bail Grounds', content: vData.bailGrounds },
+            { id: 'precedents',   icon: '📚', title: 'Case Precedents', precedents: vData.precedents },
+            { id: 'defense',      icon: '🛡', title: 'Defense Strategy', content: vData.defenseStrategy },
+            { id: 'script',       icon: '🎤', title: 'Court Script', content: vData.courtScript },
+            { id: 'constitution', icon: '📜', title: 'Constitutional Rights', content: vData.constitutionalRights },
+          ]
+          setResearchData(vData)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleSaveVersion = async () => {
+    setSavingVersion(true)
+    const updatedResearch = {
+      applicableLaw:        editedData.law || researchData?.applicableLaw,
+      bailGrounds:          editedData.bail || researchData?.bailGrounds,
+      defenseStrategy:      editedData.defense || researchData?.defenseStrategy,
+      courtScript:          editedData.script || researchData?.courtScript,
+      constitutionalRights: editedData.constitution || researchData?.constitutionalRights,
+      changeNote:           changeNote || "Manual edit by lawyer",
+    }
+    
+    try {
+      const res = await fetch(`http://localhost:5000/api/research/${id}`, {
+        method:  "PUT",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": "Bearer " + localStorage.getItem("lexai_token"),
+        },
+        body: JSON.stringify(updatedResearch),
+      })
+      const data = await res.json()
+      
+      if (data.research && data.research.applicableLaw) {
+          const rData = data.research
+          rData.sections = [
+            { id: 'law',          icon: '⚖', title: 'Applicable Law', content: rData.applicableLaw },
+            { id: 'bail',         icon: '🔓', title: 'Bail Grounds', content: rData.bailGrounds },
+            { id: 'precedents',   icon: '📚', title: 'Case Precedents', precedents: rData.precedents },
+            { id: 'defense',      icon: '🛡', title: 'Defense Strategy', content: rData.defenseStrategy },
+            { id: 'script',       icon: '🎤', title: 'Court Script', content: rData.courtScript },
+            { id: 'constitution', icon: '📜', title: 'Constitutional Rights', content: rData.constitutionalRights },
+          ]
+          setResearchData(rData)
+          setVersions(rData.versions || [])
+          if (rData.versions && rData.versions.length > 0) {
+              setActiveVersionNum(rData.versions[rData.versions.length - 1].versionNumber)
+          }
+      }
+      setEditingSections({})
+      setEditedData({})
+      setShowNoteModal(false)
+      setChangeNote('')
+      const vNum = data.research?.versions?.[data.research?.versions?.length - 1]?.versionNumber
+      setToastMessage(`Version ${vNum || ''} saved successfully`)
+      setTimeout(() => setToastMessage(null), 3000)
+    } catch (err) {
+      console.error("Failed to save research version:", err)
+    } finally {
+      setSavingVersion(false)
+    }
+  }
+
+  const handleConfirmGuideGeneration = async () => {
+    setGeneratingGuide(true)
+    try {
+      const data = await generateGuide(id)
+      setShowGuideModal(false)
+      if (data.success || data._id) {
+          navigate(`/case/${id}/guide`)
+      } else {
+          setToastMessage("Failed to generate Court Guide. Try again.")
+          setTimeout(() => setToastMessage(null), 3000)
+      }
+    } catch (err) {
+      console.error("Failed to generate Court Guide:", err)
+      setToastMessage("Failed to generate Court Guide. Try again.")
+      setTimeout(() => setToastMessage(null), 3000)
+    } finally {
+      setGeneratingGuide(false)
     }
   }
 
@@ -382,15 +509,57 @@ export default function Research() {
       <div className="res-main">
 
         {/* TOPBAR */}
-        <div className="res-topbar">
+        <div className="res-topbar" style={{ borderBottom: '1px solid rgba(201,168,76,0.15)' }}>
           <div>
-            <div className="res-title">Legal Research · <span>{currentCase.section || 'General'}</span></div>
-            <div className="res-meta">{currentCase.clientName || 'Loading...'} · {currentCase.caseCode || ''} · {currentCase.court || ''}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <span style={{ fontFamily: "'Playfair Display', serif", color: '#fff', fontSize: '20px', fontWeight: 700 }}>Legal Research</span>
+              <span style={{ color: '#C9A84C', fontSize: '20px', fontWeight: 700 }}>· {currentCase.section || 'General'}</span>
+            </div>
+            <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, color: '#F5F0E8' }}>{currentCase.clientName || 'Loading...'}</span>
+              <span style={{ color: 'rgba(201,168,76,0.5)', margin: '0 6px' }}>·</span>
+              <span style={{ fontFamily: "'DM Mono', monospace", color: '#C9A84C' }}>{currentCase.caseCode || 'N/A'}</span>
+              <span style={{ color: 'rgba(201,168,76,0.5)', margin: '0 6px' }}>·</span>
+              <span style={{ color: '#6B6560' }}>{currentCase.court || 'N/A'}</span>
+            </div>
           </div>
-          <div className="topbar-actions">
-            <button className="topbar-btn" onClick={() => navigate(`/case/${id}/chat`)}>💬 Back to Chat</button>
-            <button className="topbar-btn gold" onClick={() => navigate(`/case/${id}/guide`)}>🎤 Court Guide</button>
-            <button className="dl-btn primary" onClick={handleDownloadPDF}>⬇ Download PDF</button>
+          <div className="topbar-actions" style={{ display: 'flex', gap: '12px' }}>
+            <button onClick={() => navigate(`/case/${id}/chat`)}
+              style={{
+                padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(255,255,255,0.03)', color: '#F5F0E8', fontSize: '12px', fontWeight: 700,
+                fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+            >
+              💬 Back to Chat
+            </button>
+            <button onClick={() => setShowGuideModal(true)}
+              style={{
+                padding: '8px 14px', borderRadius: '8px', border: 'none',
+                background: 'linear-gradient(135deg, #C9A84C, #A8782A)', color: '#0A0A0F', fontSize: '12px', fontWeight: 700,
+                fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                transition: 'opacity 0.2s', boxShadow: '0 4px 12px rgba(201,168,76,0.2)'
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              ✨ Generate Court Guide
+            </button>
+            <button onClick={handleDownloadPDF}
+              style={{
+                padding: '8px 14px', borderRadius: '8px', border: 'none',
+                background: 'linear-gradient(135deg, #C9A84C, #A8782A)', color: '#0A0A0F', fontSize: '12px', fontWeight: 700,
+                fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                transition: 'opacity 0.2s', boxShadow: '0 4px 12px rgba(201,168,76,0.2)'
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              ⬇ Download PDF
+            </button>
           </div>
         </div>
 
@@ -398,31 +567,56 @@ export default function Research() {
         <div className="res-body">
           {!researchData ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '20px' }}>🎓</div>
+              <div style={{ fontSize: '48px', marginBottom: '20px' }}>{generating ? '⏳' : '🎓'}</div>
               <div style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', fontWeight: 700, color: '#C9A84C', marginBottom: '12px' }}>
-                AI Legal Research
+                {generating ? 'Generating Research...' : 'AI Legal Research'}
               </div>
-              <div style={{ fontSize: '14px', color: '#A09890', maxWidth: '400px', textAlign: 'center', lineHeight: '1.6', marginBottom: '32px' }}>
-                LexAI will analyze your case context against the Pakistan Penal Code, CrPC, and Supreme Court precedents to generate a comprehensive strategy outline.
+              <div style={{ fontSize: '14px', color: '#A09890', maxWidth: '460px', textAlign: 'center', lineHeight: '1.6', marginBottom: '32px' }}>
+                {generating 
+                  ? 'LexAI is analyzing your chat conversation and generating a comprehensive legal research document. This may take a minute...'
+                  : 'No research generated yet. You can generate research from your chat conversation, or go back to chat for more context.'}
               </div>
-              <button 
-                onClick={handleGenerateResearch} 
-                disabled={generating}
-                style={{
-                  padding: '14px 28px', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer',
-                  background: generating ? 'rgba(201,168,76,0.5)' : 'linear-gradient(135deg, #C9A84C, #A8782A)',
-                  color: '#0A0A0F', border: 'none', fontFamily: "'DM Sans', sans-serif",
-                  boxShadow: '0 8px 24px rgba(201,168,76,0.3)', transition: 'all 0.2s',
-                  display: 'flex', alignItems: 'center', gap: '8px'
-                }}
-              >
-                {generating ? (
-                  <>
-                    <div style={{ animation: 'spin 1s linear infinite' }}>⏳</div>
-                    <span>LexAI is Analyzing Precedents...</span>
-                  </>
-                ) : '✨ Generate Full Research Report'}
-              </button>
+              {generating ? (
+                <div style={{ 
+                  width: '200px', height: '4px', background: 'rgba(255,255,255,0.06)', 
+                  borderRadius: '2px', overflow: 'hidden' 
+                }}>
+                  <div style={{ 
+                    width: '40%', height: '100%', borderRadius: '2px',
+                    background: 'linear-gradient(90deg, #C9A84C, #A8782A)',
+                    animation: 'progressSlide 1.5s ease-in-out infinite'
+                  }} />
+                  <style>{`@keyframes progressSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button 
+                    onClick={handleGenerateResearch}
+                    disabled={generating}
+                    style={{
+                      padding: '14px 28px', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                      background: 'linear-gradient(135deg, #4CAF7A, #2E8B57)',
+                      color: '#fff', border: 'none', fontFamily: "'DM Sans', sans-serif",
+                      boxShadow: '0 8px 24px rgba(76,175,122,0.3)', transition: 'all 0.2s',
+                      display: 'flex', alignItems: 'center', gap: '8px'
+                    }}
+                  >
+                    ✦ Generate Research
+                  </button>
+                  <button 
+                    onClick={() => navigate(`/case/${id}/chat`)} 
+                    style={{
+                      padding: '14px 28px', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: '#A09890', border: '1px solid rgba(255,255,255,0.1)', fontFamily: "'DM Sans', sans-serif",
+                      transition: 'all 0.2s',
+                      display: 'flex', alignItems: 'center', gap: '8px'
+                    }}
+                  >
+                    💬 Back to Chat
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -432,14 +626,56 @@ export default function Research() {
                   {(researchData.sections || []).map((sec, idx) => {
                     if (!sec) return null;
                     return (
-                    <div key={sec.id || idx} id={`section-${sec.id || idx}`} className="res-section">
+                    <div key={sec.id || idx} id={`section-${sec.id || idx}`} className="res-section section-card">
                       <div className="res-section-head">
-                        <div className="res-section-icon">{sec.icon || '⚖'}</div>
-                        <div className="res-section-title">{sec.title || 'Section'}</div>
-                        <div className="res-section-tag">{sec.tag || 'LexAI'}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '34px', height: '34px', borderRadius: '8px', flexShrink: 0,
+                            background: `${SECTION_COLORS[sec.id] || '#C9A84C'}26`,
+                            border: `1px solid ${SECTION_COLORS[sec.id] || '#C9A84C'}40`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px',
+                            filter: `drop-shadow(0 0 4px ${SECTION_COLORS[sec.id] || '#C9A84C'}30)`
+                          }}>{sec.icon || '⚖'}</div>
+                          <div className="res-section-title">{sec.title || 'Section'}</div>
+                          <div className="res-section-tag">{sec.tag || 'LexAI'}</div>
+                        </div>
+                        {sec.id !== 'precedents' && (
+                          <button 
+                            onClick={() => {
+                              setEditingSections(p => ({ ...p, [sec.id]: !p[sec.id] }))
+                              if (!editedData[sec.id]) {
+                                setEditedData(p => ({ ...p, [sec.id]: sec.content }))
+                              }
+                            }}
+                            style={{
+                              background: editingSections[sec.id] ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.05)',
+                              color: editingSections[sec.id] ? '#C9A84C' : '#A09890',
+                              border: '1px solid rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '4px',
+                              cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s', marginLeft: 'auto'
+                            }}
+                          >
+                            {editingSections[sec.id] ? 'Done Editing' : '✏ Edit'}
+                          </button>
+                        )}
                       </div>
 
-                      <p className="res-body-text">{sec.content || ''}</p>
+                      <div style={{
+                        background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
+                        borderRadius: '12px', padding: '24px 28px', marginTop: '12px', marginBottom: '28px'
+                      }}>
+                      {editingSections[sec.id] ? (
+                        <textarea 
+                          value={editedData[sec.id] !== undefined ? editedData[sec.id] : (sec.content || '')}
+                          onChange={(e) => setEditedData(p => ({ ...p, [sec.id]: e.target.value }))}
+                          style={{
+                            width: '100%', minHeight: '120px', background: 'rgba(0,0,0,0.2)', border: '1px solid #C9A84C',
+                            color: '#e0e0e0', padding: '12px', borderRadius: '6px', fontSize: '13px', lineHeight: '1.6',
+                            fontFamily: 'inherit', resize: 'vertical', marginBottom: '16px'
+                          }}
+                        />
+                      ) : (
+                        <div className="res-body-text">{renderLegalText(sec.content)}</div>
+                      )}
 
                       {typeof sec.highlight === 'string' && sec.highlight.trim() !== '' && (
                         <div className="highlight-box">
@@ -467,18 +703,37 @@ export default function Research() {
 
                       {/* Precedent Cards */}
                       {Array.isArray(sec.precedents) && sec.precedents.length > 0 && sec.precedents.map((p, i) => (
-                        <div key={i} className="prec-card">
-                          <div className="prec-index">{String(i + 1).padStart(2, '0')}</div>
-                          <div className="prec-body">
-                            <div className="prec-name">{p.name || 'Unnamed Precedent'}</div>
-                            <div className="prec-meta">
-                              <span className="prec-year">{p.year || 'Unknown'}</span>
-                              <span className="prec-court">{p.court || 'Court'}</span>
-                            </div>
-                            <div className="prec-detail">{p.detail || ''}</div>
+                        <div key={i} style={{
+                          borderLeft: '3px solid rgba(201,168,76,0.35)',
+                          borderTop: '1px solid rgba(255,255,255,0.06)',
+                          borderRight: '1px solid rgba(255,255,255,0.06)',
+                          borderBottom: '1px solid rgba(255,255,255,0.06)',
+                          borderRadius: '0 10px 10px 0',
+                          padding: '16px 20px',
+                          marginBottom: '12px',
+                          background: 'rgba(255,255,255,0.03)',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontFamily: "'DM Mono', monospace", fontSize: '11px', color: '#C9A84C',
+                              background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.2)',
+                              padding: '3px 10px', borderRadius: '5px', whiteSpace: 'nowrap'
+                            }}>{p.citation || 'Citation'}</span>
+                            <span style={{
+                              fontSize: '11px', color: '#6B6560',
+                              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                              padding: '3px 10px', borderRadius: '5px', whiteSpace: 'nowrap'
+                            }}>{p.court || 'Court'}</span>
+                          </div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: '#F5F0E8', marginBottom: '8px' }}>
+                            {p.name || 'Unnamed Precedent'}
+                          </div>
+                          <div style={{ color: '#A09890' }}>
+                            {renderLegalText(p.detail)}
                           </div>
                         </div>
                       ))}
+                      </div>
                     </div>
                   )})}
                 </div>
@@ -502,13 +757,30 @@ export default function Research() {
                 </div>
 
                 <div className="panel-title">Research Outline</div>
-                {OUTLINE.map(o => (
-                  <div key={o.id} className={`outline-item ${activeSection === o.id ? 'active' : ''}`}
-                    onClick={() => scrollToSection(o.id)}>
-                    <span className="outline-icon">{o.icon}</span>
-                    <span className="outline-text">{o.label}</span>
-                  </div>
-                ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
+                {OUTLINE.map(o => {
+                  const isActive = activeSection === o.id;
+                  return (
+                    <div key={o.id}
+                      onClick={() => scrollToSection(o.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '8px 12px', borderRadius: '20px', cursor: 'pointer',
+                        background: isActive ? 'linear-gradient(135deg, #C9A84C, #A8782A)' : 'transparent',
+                        border: isActive ? 'none' : '1px solid transparent',
+                        color: isActive ? '#0A0A0F' : '#6B6560',
+                        fontWeight: isActive ? 700 : 500,
+                        fontSize: '12px', transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={e => { if (!isActive) { e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'; e.currentTarget.style.color = '#C9A84C'; } }}
+                      onMouseLeave={e => { if (!isActive) { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = '#6B6560'; } }}
+                    >
+                      <span style={{ fontSize: '13px', flexShrink: 0 }}>{o.icon}</span>
+                      <span>{o.label}</span>
+                    </div>
+                  );
+                })}
+                </div>
 
                 <div className="panel-divider" />
 
@@ -516,28 +788,206 @@ export default function Research() {
                 {[
                   { lbl: 'Laws Covered',   pct: 100 },
                   { lbl: 'Precedents',     pct: 95  },
-                  { lbl: 'Bail Strategy',  pct: 100  },
+                  { lbl: 'Bail Strategy',  pct: 100 },
                   { lbl: 'Defense Plan',   pct: 85  },
                 ].map((p, i) => (
-                  <div key={i} className="progress-item">
-                    <div className="progress-lbl">
-                      <span>{p.lbl}</span><strong>{p.pct}%</strong>
+                  <div key={i} style={{ marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '11px', color: '#6B6560' }}>{p.lbl}</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#C9A84C' }}>{p.pct}%</span>
                     </div>
-                    <div className="progress-track">
-                      <div className="progress-fill" style={{ width: `${p.pct}%` }} />
+                    <div style={{ height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div className="progress-bar-fill" style={{
+                        width: `${p.pct}%`, height: '100%', borderRadius: '3px',
+                        background: p.pct >= 100
+                          ? 'linear-gradient(90deg, #C9A84C, #4CAF7A)'
+                          : 'linear-gradient(90deg, #C9A84C, #A8782A)',
+                        transition: 'width 0.6s ease'
+                      }} />
                     </div>
                   </div>
                 ))}
 
                 <div className="panel-divider" />
 
+                <div className="panel-title">Version History</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                  {versions.slice().reverse().map(v => {
+                    const isActive = activeVersionNum === v.versionNumber;
+                    return (
+                      <div key={v.versionNumber}
+                        onClick={() => handleVersionClick(v.versionNumber)}
+                        style={{
+                          padding: '12px 16px', borderRadius: '10px', cursor: 'pointer',
+                          background: isActive ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.03)',
+                          border: isActive ? '1px solid rgba(201,168,76,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                          borderLeft: isActive ? '3px solid #C9A84C' : '1px solid rgba(255,255,255,0.07)',
+                          transition: 'all 0.2s'
+                        }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{
+                            fontFamily: "'DM Mono', monospace", fontSize: '11px', fontWeight: 700,
+                            color: isActive ? '#0A0A0F' : '#C9A84C',
+                            background: isActive ? 'linear-gradient(135deg, #C9A84C, #A8782A)' : 'rgba(201,168,76,0.12)',
+                            border: isActive ? 'none' : '1px solid rgba(201,168,76,0.2)',
+                            padding: '2px 8px', borderRadius: '4px'
+                          }}>V{v.versionNumber}</span>
+                          <span style={{ fontSize: '10px', color: '#6B6560' }}>
+                            {new Date(v.savedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
+                            {new Date(v.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#A09890', fontStyle: 'italic', lineHeight: 1.4 }}>{v.changeNote}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {Object.keys(editedData).length > 0 && (
+                  <button 
+                    onClick={() => setShowNoteModal(true)}
+                    className="panel-btn primary" 
+                    style={{ marginBottom: '16px', animation: 'fadeIn 0.3s' }}>
+                    💾 Save Changes
+                  </button>
+                )}
+
+                <div className="panel-divider" />
+
                 <button className="panel-btn primary" onClick={handleDownloadPDF}>⬇ Download PDF</button>
-                <button className="panel-btn secondary" onClick={() => navigate(`/case/${id}/guide`)}>🎤 Court Guide</button>
+                <button 
+                  className="panel-btn" 
+                  style={{ background: 'rgba(182, 92, 237, 0.15)', color: '#D49BFF', border: '1px solid rgba(182, 92, 237, 0.3)' }}
+                  onClick={() => setShowGuideModal(true)}>
+                  ✦ Generate Court Guide
+                </button>
                 <button className="panel-btn secondary" onClick={() => navigate(`/case/${id}/chat`)}>💬 Back to Chat</button>
               </div>
             </>
           )}
       </div>
+      
+      {/* GLOBAL TOAST */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', background: '#4CAF7A', color: '#fff',
+          padding: '12px 24px', borderRadius: '8px', fontSize: '14px', fontWeight: 600,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', zIndex: 9999, animation: 'fadeIn 0.3s'
+        }}>
+          ✅ {toastMessage}
+        </div>
+      )}
+
+      {/* SAVE NOTE MODAL */}
+      {showNoteModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000
+        }}>
+          <div style={{
+            background: '#1a1a1a', border: '1px solid #333', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%'
+          }}>
+            <h3 style={{ margin: '0 0 16px', color: '#fff' }}>Save Version</h3>
+            <p style={{ fontSize: '13px', color: '#aaa', marginBottom: '16px' }}>What did you change in this version?</p>
+            <textarea
+              autoFocus
+              value={changeNote}
+              onChange={(e) => setChangeNote(e.target.value)}
+              placeholder="e.g. Updated defense strategy based on new witness..."
+              style={{
+                width: '100%', height: '80px', background: 'rgba(255,255,255,0.05)', border: '1px solid #444',
+                color: '#fff', padding: '12px', borderRadius: '6px', fontSize: '13px', marginBottom: '20px', resize: 'none'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => setShowNoteModal(false)}
+                disabled={savingVersion}
+                style={{
+                  padding: '8px 16px', background: 'transparent', border: '1px solid #555', color: '#aaa',
+                  borderRadius: '6px', cursor: 'pointer'
+                }}>Cancel</button>
+              <button 
+                onClick={handleSaveVersion}
+                disabled={savingVersion}
+                style={{
+                  padding: '8px 16px', background: '#C9A84C', border: 'none', color: '#000', fontWeight: 600,
+                  borderRadius: '6px', cursor: savingVersion ? 'wait' : 'pointer'
+                }}>
+                {savingVersion ? 'Saving...' : 'Confirm & Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GENERATE GUIDE MODAL */}
+      {showGuideModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000
+        }}>
+          <div style={{
+            background: '#1a1a1a', border: '1px solid #333', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%'
+          }}>
+            <h3 style={{ margin: '0 0 16px', color: '#fff' }}>Generate Court Guide</h3>
+            <p style={{ fontSize: '13px', color: '#aaa', marginBottom: '24px', lineHeight: '1.5' }}>
+              This will generate a Court Guide based on the current research version [V{activeVersionNum}]. Continue?
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => setShowGuideModal(false)}
+                disabled={generatingGuide}
+                style={{
+                  padding: '8px 16px', background: 'transparent', border: '1px solid #555', color: '#aaa',
+                  borderRadius: '6px', cursor: 'pointer'
+                }}>Cancel</button>
+              <button 
+                onClick={handleConfirmGuideGeneration}
+                disabled={generatingGuide}
+                style={{
+                  padding: '8px 16px', background: 'linear-gradient(135deg, #B65CED, #853bba)', border: 'none', color: '#fff', fontWeight: 600,
+                  borderRadius: '6px', cursor: generatingGuide ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
+                }}>
+                {generatingGuide ? (
+                  <>
+                    <div style={{ animation: 'spin 1s linear infinite' }}>⏳</div>
+                    Generating...
+                  </>
+                ) : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <style>{`
+        @keyframes sectionReveal {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0);   }
+        }
+        .section-card { animation: sectionReveal 0.4s ease forwards; opacity: 0; }
+        .section-card:nth-child(1) { animation-delay: 0.05s; }
+        .section-card:nth-child(2) { animation-delay: 0.10s; }
+        .section-card:nth-child(3) { animation-delay: 0.15s; }
+        .section-card:nth-child(4) { animation-delay: 0.20s; }
+        .section-card:nth-child(5) { animation-delay: 0.25s; }
+        .section-card:nth-child(6) { animation-delay: 0.30s; }
+      
+        @keyframes checkBounce {
+          0%   { transform: scale(1);    }
+          40%  { transform: scale(0.85); }
+          70%  { transform: scale(1.1);  }
+          100% { transform: scale(1);    }
+        }
+        .checkbox-bounce { animation: checkBounce 0.2s ease; }
+      
+        @keyframes barFill { from { width: 0%; } }
+        .progress-bar-fill { animation: barFill 0.8s ease-out forwards; }
+      
+        .stage-body          { max-height: 0;      overflow: hidden;
+                               transition: max-height 0.35s ease; }
+        .stage-body.expanded { max-height: 2000px; }
+      `}</style>
       </div>
     </div>
   )

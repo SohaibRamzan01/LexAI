@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { sendMessage, getChatHistory, getCases } from '../services/api'
+import { sendMessage, getChatHistory, getCases, getResearch } from '../services/api'
 
 const LANGUAGES = {
   english: {
@@ -65,10 +65,15 @@ export default function Chat() {
   const [isTyping,      setIsTyping]      = useState(false)
   const [currentCaseObj,setCurrentCaseObj]= useState({})
   const [researchReady, setResearchReady] = useState(false)
+  const [researchDetected, setResearchDetected] = useState(false)
+  const [pendingResearch, setPendingResearch] = useState(null)
   const [error,         setError]         = useState(null)
   const [chatHistory,   setChatHistory]   = useState([])
   const [feeDetected,   setFeeDetected]   = useState(null)
   const [feeDismissed,  setFeeDismissed]  = useState(false)
+  const [researchSaved, setResearchSaved] = useState(false)
+  const [guideAvailable,setGuideAvailable] = useState(false)
+  const [savingResearch,setSavingResearch] = useState(false)
   const [cases,         setCases]         = useState([])
 
   const messagesEndRef = useRef(null)
@@ -80,7 +85,7 @@ export default function Chat() {
   // ── Auto scroll ────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isTyping, feeDetected])
+  }, [messages, isTyping, feeDetected, researchDetected, researchSaved])
 
   // ── Close lang dropdown on outside click ──────────────────
   useEffect(() => {
@@ -134,6 +139,17 @@ export default function Chat() {
       }
     }
 
+    const fetchResearchStatus = async () => {
+      try {
+        const researchData = await getResearch(id)
+        if (researchData && researchData.versions && researchData.versions.length > 0) {
+          setResearchSaved(true)
+        }
+      } catch (err) {
+        console.log("No existing research mapped.", err)
+      }
+    }
+
     const loadCases = async () => {
       try {
         const data = await getCases()
@@ -152,9 +168,10 @@ export default function Chat() {
         console.error(error)
       }
     }
-    
+
     if (id) {
       fetchHistory()
+      fetchResearchStatus()
       loadCases()
     }
   }, [id, language])
@@ -260,7 +277,13 @@ export default function Chat() {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }
       setMessages(prev => [...prev, aiMsgObj])
-      if (chatHistory.length >= 1) setResearchReady(true)
+      
+      if (data.researchDetected) {
+        setResearchDetected(true)
+        setPendingResearch(aiText)
+      } else {
+        if (chatHistory.length >= 1) setResearchReady(true)
+      }
 
     } catch (err) {
       console.error('Gemini error:', err)
@@ -273,6 +296,29 @@ export default function Chat() {
       setIsTyping(false)
     }
   }
+
+  const handleSaveResearch = async () => {
+    setSavingResearch(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/research/${id}/generate`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": "Bearer " + localStorage.getItem("lexai_token"),
+        },
+      });
+      const data = await res.json();
+      if (data.success || data._id) {
+        setResearchSaved(true);
+        setResearchDetected(false);
+        setGuideAvailable(false);   // reset until lawyer approves research
+      }
+    } catch (err) {
+      console.error("Failed to save research:", err);
+    } finally {
+      setSavingResearch(false);
+    }
+  };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
@@ -630,6 +676,16 @@ export default function Chat() {
               💰 Fees
             </button>
 
+            {/* GENERATE COURT GUIDE BUTTON — visible if research exists */}
+            {researchSaved && (
+              <button 
+                className="topbar-btn" 
+                style={{ background: 'rgba(182, 92, 237, 0.15)', color: '#D49BFF', border: '1px solid rgba(182, 92, 237, 0.3)' }}
+                onClick={() => navigate(`/case/${id}/research`)}>
+                ✦ Generate Court Guide
+              </button>
+            )}
+
             {/* RESEARCH + COURT GUIDE — appear after enough context */}
             {researchReady && (
               <>
@@ -711,6 +767,61 @@ export default function Chat() {
                   onClick={() => setFeeDismissed(true)}
                 >
                   Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* RESEARCH DETECTION BANNER */}
+          {researchDetected && !researchSaved && (
+            <div className="fee-banner" style={{ borderLeftColor: '#4CAF7A' }}>
+              <div className="fee-banner-left">
+                <div className="fee-banner-icon">📄</div>
+                <div>
+                  <div className="fee-banner-title" style={{ color: '#4CAF7A' }}>Research Document Generated</div>
+                  <div className="fee-banner-sub">
+                    LexAI has produced a complete research document. Save it to the Research section?
+                  </div>
+                </div>
+              </div>
+              <div className="fee-banner-actions">
+                <button
+                  className="fee-update-btn"
+                  style={{ background: '#4CAF7A' }}
+                  onClick={handleSaveResearch}
+                  disabled={savingResearch}
+                >
+                  {savingResearch ? 'Saving...' : '📄 Save to Research'}
+                </button>
+                <button
+                  className="fee-dismiss-btn"
+                  onClick={() => setResearchDetected(false)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* RESEARCH SUCCESS MESSAGE */}
+          {researchSaved && (
+            <div className="fee-banner" style={{ borderLeftColor: '#4CAF7A', background: 'rgba(76,175,122,0.1)' }}>
+              <div className="fee-banner-left">
+                <div className="fee-banner-icon">✅</div>
+                <div>
+                  <div className="fee-banner-title" style={{ color: '#4CAF7A' }}>Research saved!</div>
+                  <div className="fee-banner-sub">
+                    Your research document is safely mapped and ready for review.
+                  </div>
+                </div>
+              </div>
+              <div className="fee-banner-actions">
+                <button
+                  className="fee-update-btn"
+                  style={{ background: '#4CAF7A' }}
+                  onClick={() => navigate(`/case/${id}/research`)}
+                >
+                  View in Research Tab →
                 </button>
               </div>
             </div>

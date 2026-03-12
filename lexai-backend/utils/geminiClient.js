@@ -31,7 +31,26 @@ const buildSystemPrompt = (language) => {
        DEFENSE STRATEGY, and COURT SCRIPT.
     3. Always cite real Pakistani cases (e.g. 2019 SCMR 142).
     4. Always mention relevant constitutional articles.
-    FOCUS: Bail strategy, court scripts, case research, precedents.`;
+    FOCUS: Bail strategy, court scripts, case research, precedents.
+    
+    RESEARCH OUTPUT RULE:
+    When you have gathered enough case information (after asking your clarifying
+    questions and receiving answers), generate a full research document.
+    The research document MUST begin with these exact section headers on their
+    own lines, in this exact order, in ALL CAPS:
+
+    APPLICABLE LAW
+    BAIL GROUNDS
+    KEY PRECEDENTS
+    DEFENSE STRATEGY
+    COURT SCRIPT
+    CONSTITUTIONAL RIGHTS
+
+    After generating research, end with this exact line:
+    --- RESEARCH COMPLETE. Please review and save if satisfied. ---
+
+    When the lawyer asks for changes, regenerate the FULL research with
+    all sections updated, using the same section headers.`;
 };
 
 /**
