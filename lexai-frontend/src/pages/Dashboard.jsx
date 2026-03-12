@@ -458,7 +458,7 @@ export default function Dashboard() {
       {/* ── SIDEBAR ── */}
       <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
-          <div className="sidebar-logo">Lex<span>AI</span></div>
+          <div className="sidebar-logo" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>Lex<span>AI</span></div>
           <button className="icon-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
             {sidebarCollapsed ? '▶' : '◀'}
           </button>

@@ -29,6 +29,7 @@ export default function CaseDetail() {
     const [savingHearing,  setSavingHearing]  = useState(false)
     const [savingEdit,     setSavingEdit]     = useState(false)
     const [deletingId,     setDeletingId]     = useState(null)
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
     useEffect(() => {
         const loadCasesList = async () => {
@@ -162,16 +163,24 @@ export default function CaseDetail() {
           border-right: 1px solid rgba(255,255,255,0.07);
           display: flex; flex-direction: column;
           height: 100vh; position: sticky; top: 0;
+          transition: width 0.3s, min-width 0.3s;
         }
+        .sidebar.collapsed { width: 68px; min-width: 68px; }
+
         .sidebar-header {
           padding: 18px 16px 14px;
           border-bottom: 1px solid rgba(255,255,255,0.07);
           display: flex; align-items: center; justify-content: space-between;
         }
-        .sidebar-logo { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: #C9A84C; }
+        .sidebar-logo {
+          font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: #C9A84C;
+          white-space: nowrap; overflow: hidden; transition: opacity 0.2s;
+        }
         .sidebar-logo span { color: #F5F0E8; }
+        .sidebar.collapsed .sidebar-logo { opacity: 0; width: 0; }
+
         .icon-btn {
-          width: 30px; height: 30px; border-radius: 7px;
+          width: 30px; height: 30px; border-radius: 7px; flex-shrink: 0;
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
           display: flex; align-items: center; justify-content: center;
           font-size: 13px; cursor: pointer; color: #6B6560; outline: none; transition: all 0.2s;
@@ -349,12 +358,16 @@ export default function CaseDetail() {
       `}</style>
 
             {/* SIDEBAR */}
-            <div className="sidebar">
+            <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
                 <div className="sidebar-header">
-                    <div className="sidebar-logo">Lex<span>AI</span></div>
-                    <button className="icon-btn" onClick={() => navigate('/dashboard')}>🏠</button>
+                    <div className="sidebar-logo" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>Lex<span>AI</span></div>
+                    <button className="icon-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
+                        {sidebarCollapsed ? '▶' : '◀'}
+                    </button>
                 </div>
-                <button className="new-case-btn" onClick={() => navigate('/dashboard')}>＋ New Case</button>
+                {!sidebarCollapsed && (
+                    <>
+                        <button className="new-case-btn" onClick={() => navigate('/dashboard')}>＋ New Case</button>
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                     <div className="sidebar-section-lbl">Cases</div>
                     {cases.map(c => (
@@ -378,6 +391,8 @@ export default function CaseDetail() {
                         </div>
                     </div>
                 </div>
+                    </>
+                )}
             </div>
 
             {/* MAIN */}
