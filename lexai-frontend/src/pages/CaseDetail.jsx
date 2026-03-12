@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getCases, getCase, updateCase, addHearing, deleteHearing } from '../services/api'
 
 const STATUS_DOT = { active: '#4CAF7A', done: '#C9A84C', pending: '#7B9FD4', urgent: '#E07060', closed: '#555555' }
+const OUTCOME_DOT = { ongoing: '#6B6560', won: '#4CAF7A', lost: '#E07060', settled: '#7B9FD4', dismissed: '#888888' }
 
 const HEARING_STEPS = [
     "Summon", "Notice", "Written Statement", "Replication", 
@@ -64,6 +65,7 @@ export default function CaseDetail() {
                 adverseAdvocateName:    data.adverseAdvocateName    || "",
                 adverseAdvocateContact: data.adverseAdvocateContact || "",
                 status:                 data.status        || "active",
+                outcome:                data.outcome       || "ongoing",
                 language:               data.language      || "english",
             });
             setError(null);
@@ -443,6 +445,19 @@ export default function CaseDetail() {
                                     </div>
                                 </div>
                                 <div className="info-field">
+                                    <span className="info-label">Outcome</span>
+                                    <div style={{ marginTop: '2px' }}>
+                                        {caseData.outcome === 'ongoing' ? (
+                                            <span className="info-val" style={{ textTransform: 'capitalize', color: '#6B6560', fontSize: '13px', fontStyle: 'italic', fontWeight: 600 }}>{caseData.outcome}</span>
+                                        ) : (
+                                            <span className="status-badge" style={{ color: OUTCOME_DOT[caseData.outcome] || '#F5F0E8', borderColor: `${OUTCOME_DOT[caseData.outcome] || '#F5F0E8'}40`, background: `${OUTCOME_DOT[caseData.outcome] || '#F5F0E8'}15` }}>
+                                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: OUTCOME_DOT[caseData.outcome] || '#F5F0E8' }} />
+                                                {caseData.outcome || '—'}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="info-field">
                                     <span className="info-label">Language / Translation</span>
                                     <span className="info-val" style={{textTransform: 'capitalize'}}>{caseData.language || '—'}</span>
                                 </div>
@@ -581,16 +596,26 @@ export default function CaseDetail() {
 
                         <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Case Number</label>
-                                <input className="form-input" value={editForm.caseNumber} onChange={e => setEditForm({...editForm, caseNumber: e.target.value})} />
+                                <label className="form-label">Outcome</label>
+                                <select className="form-input" value={editForm.outcome} onChange={e => setEditForm({...editForm, outcome: e.target.value})}>
+                                    <option value="ongoing">Ongoing</option>
+                                    <option value="won">Won</option>
+                                    <option value="lost">Lost</option>
+                                    <option value="settled">Settled</option>
+                                    <option value="dismissed">Dismissed</option>
+                                </select>
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Case Year</label>
-                                <input className="form-input" value={editForm.caseYear} onChange={e => setEditForm({...editForm, caseYear: e.target.value})} />
+                                <label className="form-label">Case Number</label>
+                                <input className="form-input" value={editForm.caseNumber} onChange={e => setEditForm({...editForm, caseNumber: e.target.value})} />
                             </div>
                         </div>
 
                         <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Case Year</label>
+                                <input className="form-input" value={editForm.caseYear} onChange={e => setEditForm({...editForm, caseYear: e.target.value})} />
+                            </div>
                             <div className="form-group">
                                 <label className="form-label">On Behalf Of</label>
                                 <select className="form-input" value={editForm.onBehalfOf} onChange={e => setEditForm({...editForm, onBehalfOf: e.target.value})}>
@@ -602,6 +627,8 @@ export default function CaseDetail() {
                                     <option value="Accused">Accused</option>
                                 </select>
                             </div>
+                        </div>
+                        <div className="form-row">
                             <div className="form-group">
                                 <label className="form-label">Party Name</label>
                                 <input className="form-input" value={editForm.partyName} onChange={e => setEditForm({...editForm, partyName: e.target.value})} />

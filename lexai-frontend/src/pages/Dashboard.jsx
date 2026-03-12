@@ -535,7 +535,7 @@ export default function Dashboard() {
                 onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
-            <button className="topbar-btn">📊 Reports</button>
+            <button className="topbar-btn" onClick={() => navigate('/reports')} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#A09890' }}>📊 View Full Reports</button>
             <button className="topbar-btn" onClick={() => { localStorage.removeItem("lexai_token"); localStorage.removeItem("lexai_user"); navigate('/auth'); }}>⬚ Sign Out</button>
           </div>
         </div>

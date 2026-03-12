@@ -7,6 +7,7 @@ import Chat       from './pages/Chat'
 import Research   from './pages/Research'
 import CourtGuide from './pages/CourtGuide'
 import FeesMonitor from './pages/FeesMonitor'
+import Reports from './pages/Reports'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/case/:id/research"   element={<Research />}    />
         <Route path="/case/:id/guide"      element={<CourtGuide />}  />
         <Route path="/case/:id/fees"       element={<FeesMonitor />} />
+        <Route path="/reports"             element={<Reports />}     />
       </Routes>
     </BrowserRouter>
   )

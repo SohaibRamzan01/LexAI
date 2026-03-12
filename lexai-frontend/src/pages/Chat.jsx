@@ -773,14 +773,16 @@ export default function Chat() {
           )}
 
           {/* RESEARCH DETECTION BANNER */}
-          {researchDetected && !researchSaved && (
+          {researchDetected && (
             <div className="fee-banner" style={{ borderLeftColor: '#4CAF7A' }}>
               <div className="fee-banner-left">
                 <div className="fee-banner-icon">📄</div>
                 <div>
-                  <div className="fee-banner-title" style={{ color: '#4CAF7A' }}>Research Document Generated</div>
+                  <div className="fee-banner-title" style={{ color: '#4CAF7A' }}>
+                    {researchSaved ? 'Updated Research Generated' : 'Research Document Generated'}
+                  </div>
                   <div className="fee-banner-sub">
-                    LexAI has produced a complete research document. Save it to the Research section?
+                    LexAI has produced {researchSaved ? 'an updated' : 'a complete'} research document. Save it to the Research section?
                   </div>
                 </div>
               </div>
@@ -804,7 +806,7 @@ export default function Chat() {
           )}
 
           {/* RESEARCH SUCCESS MESSAGE */}
-          {researchSaved && (
+          {researchSaved && !researchDetected && (
             <div className="fee-banner" style={{ borderLeftColor: '#4CAF7A', background: 'rgba(76,175,122,0.1)' }}>
               <div className="fee-banner-left">
                 <div className="fee-banner-icon">✅</div>

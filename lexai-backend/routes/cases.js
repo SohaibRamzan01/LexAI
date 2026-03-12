@@ -44,6 +44,7 @@ router.post("/", async (req, res) => {
             policeStation,
             adverseAdvocateName,
             adverseAdvocateContact,
+            outcome,
         } = req.body;
 
         const newCase = new Case({
@@ -64,6 +65,7 @@ router.post("/", async (req, res) => {
             policeStation,
             adverseAdvocateName,
             adverseAdvocateContact,
+            outcome,
             // Associate the user making the request with the new case
             lawyer: req.user.id,
         });
@@ -122,6 +124,7 @@ router.put("/:id", async (req, res) => {
             policeStation,
             adverseAdvocateName,
             adverseAdvocateContact,
+            outcome,
         } = req.body;
 
         const updateData = {
@@ -142,6 +145,7 @@ router.put("/:id", async (req, res) => {
             policeStation,
             adverseAdvocateName,
             adverseAdvocateContact,
+            outcome,
             updatedAt: new Date(),
         };
 

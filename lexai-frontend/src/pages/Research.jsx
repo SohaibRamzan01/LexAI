@@ -138,8 +138,8 @@ export default function Research() {
       })
       const data = await res.json()
       
-      if (data.research && data.research.applicableLaw) {
-          const rData = data.research
+      const rData = data.research || data;
+      if (rData && rData.applicableLaw) {
           rData.sections = [
             { id: 'law',          icon: '⚖', title: 'Applicable Law', content: rData.applicableLaw },
             { id: 'bail',         icon: '🔓', title: 'Bail Grounds', content: rData.bailGrounds },
@@ -158,7 +158,7 @@ export default function Research() {
       setEditedData({})
       setShowNoteModal(false)
       setChangeNote('')
-      const vNum = data.research?.versions?.[data.research?.versions?.length - 1]?.versionNumber
+      const vNum = (data.research || data)?.versions?.slice(-1)[0]?.versionNumber
       setToastMessage(`Version ${vNum || ''} saved successfully`)
       setTimeout(() => setToastMessage(null), 3000)
     } catch (err) {
@@ -853,6 +853,14 @@ export default function Research() {
                 )}
 
                 <div className="panel-divider" />
+
+                <button 
+                  className="panel-btn" 
+                  style={{ background: 'linear-gradient(135deg, #4CAF7A, #2E8B57)', color: '#fff', border: 'none', marginBottom: '8px' }}
+                  onClick={handleGenerateResearch}
+                  disabled={generating}>
+                  {generating ? '⏳ Generating...' : '✦ Update AI Research'}
+                </button>
 
                 <button className="panel-btn primary" onClick={handleDownloadPDF}>⬇ Download PDF</button>
                 <button 

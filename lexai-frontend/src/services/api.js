@@ -61,7 +61,8 @@ export const createCase = async (data) => {
         firNumber: data.firNumber,
         policeStation: data.policeStation,
         adverseAdvocateName: data.adverseAdvocateName,
-        adverseAdvocateContact: data.adverseAdvocateContact
+        adverseAdvocateContact: data.adverseAdvocateContact,
+        outcome: data.outcome
     };
     const res = await fetch(`${BASE_URL}/cases`, {
         method: "POST",
@@ -89,7 +90,8 @@ export const updateCase = async (id, data) => {
         firNumber: data.firNumber,
         policeStation: data.policeStation,
         adverseAdvocateName: data.adverseAdvocateName,
-        adverseAdvocateContact: data.adverseAdvocateContact
+        adverseAdvocateContact: data.adverseAdvocateContact,
+        outcome: data.outcome
     };
     const res = await fetch(`${BASE_URL}/cases/${id}`, {
         method: "PUT",
@@ -261,5 +263,52 @@ export const updateFees = async (caseId, data) => {
         headers: getHeaders(),
         body: JSON.stringify(data)
     });
+    return res.json();
+};
+
+// REPORTS
+
+export const getSummaryReport = async () => {
+    const res = await fetch(`${BASE_URL}/reports/summary`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const getRevenueReport = async () => {
+    const res = await fetch(`${BASE_URL}/reports/revenue`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const getCasesReport = async () => {
+    const res = await fetch(`${BASE_URL}/reports/cases`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const getWinLossReport = async () => {
+    const res = await fetch(`${BASE_URL}/reports/winloss`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
+export const getResearchReport = async () => {
+    const res = await fetch(`${BASE_URL}/reports/research`, {
+        method: "GET",
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
     return res.json();
 };

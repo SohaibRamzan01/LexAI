@@ -10,6 +10,7 @@ const chatRoutes = require("./routes/chat");
 const researchRoutes = require("./routes/research");
 const feesRoutes = require("./routes/fees");
 const guideRoutes = require("./routes/guide");
+const reportRoutes = require("./routes/reports");
 
 // Load Models
 const CourtGuide = require("./models/CourtGuide");
@@ -36,6 +37,7 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/research", researchRoutes);
 app.use("/api/guide", guideRoutes);
 app.use("/api/fees", feesRoutes);
+app.use("/api/reports", reportRoutes);
 
 // Start Server
 const PORT = process.env.PORT || 5000;

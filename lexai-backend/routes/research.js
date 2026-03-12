@@ -88,19 +88,23 @@ router.post("/:caseId/generate", async (req, res) => {
         const parsed = JSON.parse(clean);
         console.log("Parsed Research:", parsed);
 
-        // 5. Build the version object
+        // 5. Check if research already exists to determine version number
+        const existingResearch = await Research.findOne({ case: caseDoc._id });
+        const nextVersionNum = existingResearch ? (existingResearch.currentVersion || existingResearch.versions.length) + 1 : 1;
+
+        // 6. Build the version object
         const versionData = {
             ...parsed,
-            versionNumber: 1,
-            changeNote: "Initial AI-generated research",
+            versionNumber: nextVersionNum,
+            changeNote: nextVersionNum === 1 ? "Initial AI-generated research" : "AI-regenerated research",
             savedAt: new Date(),
         };
 
-        // 6. Save or update (upsert) the Research document
+        // 7. Save or update (upsert) the Research document
         const research = await Research.findOneAndUpdate(
             { case: caseDoc._id },
             {
-                $set: { ...parsed, currentVersion: 1, generatedAt: new Date() },
+                $set: { ...parsed, currentVersion: nextVersionNum, generatedAt: new Date() },
                 $push: { versions: versionData },
             },
             { upsert: true, new: true }

@@ -46,6 +46,11 @@ const caseSchema = new mongoose.Schema(
             },
             default: "active",
         },
+        outcome: {
+            type: String,
+            enum: ["ongoing", "won", "lost", "settled", "dismissed"],
+            default: "ongoing",
+        },
         lawyer: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
