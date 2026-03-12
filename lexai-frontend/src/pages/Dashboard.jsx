@@ -7,7 +7,7 @@ const STATUS_COLORS = {
   done: { dot: '#C9A84C', tag: 'rgba(201,168,76,0.12)', tagText: '#C9A84C', tagBorder: 'rgba(201,168,76,0.25)', accent: '#C9A84C' },
   pending: { dot: '#7B9FD4', tag: 'rgba(123,159,212,0.12)', tagText: '#7B9FD4', tagBorder: 'rgba(123,159,212,0.25)', accent: '#7B9FD4' },
   urgent: { dot: '#E07060', tag: 'rgba(224,112,96,0.12)', tagText: '#E07060', tagBorder: 'rgba(224,112,96,0.25)', accent: '#E07060' },
-  closed: { dot: '#4A4540', tag: 'rgba(74,69,64,0.3)', tagText: '#6B6560', tagBorder: 'rgba(74,69,64,0.4)', accent: '#3A3530' },
+  closed: { dot: '#555555', tag: 'rgba(85,85,85,0.3)', tagText: '#555555', tagBorder: 'rgba(85,85,85,0.4)', accent: '#555555' },
 }
 
 export default function Dashboard() {

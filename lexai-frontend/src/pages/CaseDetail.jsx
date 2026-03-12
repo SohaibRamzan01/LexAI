@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getCases, getCase, updateCase, addHearing, deleteHearing } from '../services/api'
 
-const STATUS_DOT = { active: '#4CAF7A', done: '#C9A84C', pending: '#7B9FD4', urgent: '#E07060', closed: '#4A4540' }
+const STATUS_DOT = { active: '#4CAF7A', done: '#C9A84C', pending: '#7B9FD4', urgent: '#E07060', closed: '#555555' }
 
 const HEARING_STEPS = [
     "Summon", "Notice", "Written Statement", "Replication", 
@@ -512,11 +512,11 @@ export default function CaseDetail() {
                                                 <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
                                                     <div>
                                                         <span className="tl-label">Prev Date: </span>
-                                                        <span className="tl-date" style={{ color: '#4CAF7A' }}>{h.previousDate ? new Date(h.previousDate).toLocaleDateString() : '—'}</span>
+                                                        <span className="tl-date" style={{ color: '#4CAF7A' }}>{h.previousDate ? new Date(h.previousDate).toLocaleDateString("en-PK") : '—'}</span>
                                                     </div>
                                                     <div>
                                                         <span className="tl-label" style={{color: '#F5A623', fontWeight: 600}}>Adjourn Dt: </span>
-                                                        <span className="tl-date" style={{ color: '#F5A623', fontWeight: 600 }}>{h.adjournDate ? new Date(h.adjournDate).toLocaleDateString() : '—'}</span>
+                                                        <span className="tl-date" style={{ color: '#F5A623', fontWeight: 600 }}>{h.adjournDate ? new Date(h.adjournDate).toLocaleDateString("en-PK") : '—'}</span>
                                                     </div>
                                                 </div>
                                                 {h.notes && <div className="tl-note">{h.notes}</div>}
