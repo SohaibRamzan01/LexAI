@@ -523,7 +523,12 @@ export default function Dashboard() {
         {/* TOPBAR */}
         <div className="dash-topbar">
           <div className="dash-greeting">
-            Good Morning, <span>{JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName || 'Advocate'}</span> ⚖
+            {(() => {
+              const hour = new Date().getHours();
+              if (hour < 12) return 'Good Morning';
+              if (hour < 18) return 'Good Afternoon';
+              return 'Good Evening';
+            })()}, <span>{JSON.parse(localStorage.getItem('lexai_user') || '{}').firstName || 'Advocate'}</span> ⚖
           </div>
           <div className="topbar-right">
             <div className="search-box">

@@ -91,6 +91,7 @@ export default function CaseDetail() {
             setCases(casesData)
         } catch (err) {
             console.error("Failed to update case:", err)
+            alert("Failed to save case: " + (err.message || 'Unknown error. Check console.'))
         } finally {
             setSavingEdit(false)
         }
@@ -376,7 +377,7 @@ export default function CaseDetail() {
                             onClick={() => navigate(`/case/${c._id}/details`)}>
                             <div className="case-dot" style={{ background: STATUS_DOT[c.status] || STATUS_DOT.pending }} />
                             <div>
-                                <div className="case-item-title">{c.clientName} · {c.section}</div>
+                                <div className="case-item-title">{c.partyName || c.title} {c.section ? `· ${c.section}` : ''}</div>
                                 <div className="case-item-meta">Details</div>
                             </div>
                         </div>
@@ -399,7 +400,7 @@ export default function CaseDetail() {
             <div className="main-col">
                 <div className="topbar">
                     <div>
-                        <div className="topbar-title">Case Details · <span>{caseData.clientName || 'Loading...'}</span></div>
+                        <div className="topbar-title">Case Details · <span>{caseData.partyName || caseData.title || 'Loading...'}</span></div>
                         <div className="topbar-meta">{caseData.caseCode || ''} · {caseData.section || ''} · {caseData.court || ''}</div>
                     </div>
                     <div className="topbar-actions">
@@ -420,10 +421,6 @@ export default function CaseDetail() {
                             </div>
                             
                             <div className="info-grid">
-                                <div className="info-field">
-                                    <span className="info-label">Client Name</span>
-                                    <span className="info-val">{caseData.clientName || '—'}</span>
-                                </div>
                                 <div className="info-field">
                                     <span className="info-label">Title</span>
                                     <span className="info-val">{caseData.title || '—'}</span>
@@ -449,28 +446,6 @@ export default function CaseDetail() {
                                 <div className="info-field">
                                     <span className="info-label">Section / U.S.</span>
                                     <span className="info-val">{caseData.section || '—'}</span>
-                                </div>
-                                <div className="info-field">
-                                    <span className="info-label">Internal Status</span>
-                                    <div style={{ marginTop: '2px' }}>
-                                        <span className="status-badge" style={{ color: STATUS_DOT[caseData.status] || '#F5F0E8', borderColor: `${STATUS_DOT[caseData.status] || '#F5F0E8'}40`, background: `${STATUS_DOT[caseData.status] || '#F5F0E8'}15` }}>
-                                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_DOT[caseData.status] || '#F5F0E8' }} />
-                                            {caseData.status || '—'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="info-field">
-                                    <span className="info-label">Outcome</span>
-                                    <div style={{ marginTop: '2px' }}>
-                                        {caseData.outcome === 'ongoing' ? (
-                                            <span className="info-val" style={{ textTransform: 'capitalize', color: '#6B6560', fontSize: '13px', fontStyle: 'italic', fontWeight: 600 }}>{caseData.outcome}</span>
-                                        ) : (
-                                            <span className="status-badge" style={{ color: OUTCOME_DOT[caseData.outcome] || '#F5F0E8', borderColor: `${OUTCOME_DOT[caseData.outcome] || '#F5F0E8'}40`, background: `${OUTCOME_DOT[caseData.outcome] || '#F5F0E8'}15` }}>
-                                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: OUTCOME_DOT[caseData.outcome] || '#F5F0E8' }} />
-                                                {caseData.outcome || '—'}
-                                            </span>
-                                        )}
-                                    </div>
                                 </div>
                                 <div className="info-field">
                                     <span className="info-label">Language / Translation</span>
@@ -517,6 +492,33 @@ export default function CaseDetail() {
                                 <div className="info-field">
                                     <span className="info-label">Advocate Contact</span>
                                     <span className="info-val">{caseData.adverseAdvocateContact || '—'}</span>
+                                </div>
+
+                                <div className="info-field" style={{ gridColumn: '1 / -1', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px', marginTop: '10px' }}>
+                                    <span className="info-label" style={{color: '#4CAF7A'}}>Status & Outcome</span>
+                                </div>
+
+                                <div className="info-field">
+                                    <span className="info-label">Internal Status</span>
+                                    <div style={{ marginTop: '2px' }}>
+                                        <span className="status-badge" style={{ color: STATUS_DOT[caseData.status] || '#F5F0E8', borderColor: `${STATUS_DOT[caseData.status] || '#F5F0E8'}40`, background: `${STATUS_DOT[caseData.status] || '#F5F0E8'}15` }}>
+                                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_DOT[caseData.status] || '#F5F0E8' }} />
+                                            {caseData.status || '—'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="info-field">
+                                    <span className="info-label">Outcome</span>
+                                    <div style={{ marginTop: '2px' }}>
+                                        {caseData.outcome === 'ongoing' ? (
+                                            <span className="info-val" style={{ textTransform: 'capitalize', color: '#6B6560', fontSize: '13px', fontStyle: 'italic', fontWeight: 600 }}>{caseData.outcome}</span>
+                                        ) : (
+                                            <span className="status-badge" style={{ color: OUTCOME_DOT[caseData.outcome] || '#F5F0E8', borderColor: `${OUTCOME_DOT[caseData.outcome] || '#F5F0E8'}40`, background: `${OUTCOME_DOT[caseData.outcome] || '#F5F0E8'}15` }}>
+                                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: OUTCOME_DOT[caseData.outcome] || '#F5F0E8' }} />
+                                                {caseData.outcome || '—'}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
                             </div>
@@ -571,11 +573,7 @@ export default function CaseDetail() {
                         <div className="modal-sub">Update the master file for this case.</div>
                         
                         <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">Client Name *</label>
-                                <input className="form-input" value={editForm.clientName} onChange={e => setEditForm({...editForm, clientName: e.target.value})} />
-                            </div>
-                            <div className="form-group">
+                            <div className="form-group" style={{gridColumn: "1 / -1"}}>
                                 <label className="form-label">Case Title *</label>
                                 <input className="form-input" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} />
                             </div>
@@ -596,29 +594,6 @@ export default function CaseDetail() {
                             <div className="form-group">
                                 <label className="form-label">Court</label>
                                 <input className="form-input" value={editForm.court} onChange={e => setEditForm({...editForm, court: e.target.value})} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Status</label>
-                                <select className="form-input" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
-                                    <option value="active">Active</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="done">Done</option>
-                                    <option value="urgent">Urgent</option>
-                                    <option value="closed">Closed</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">Outcome</label>
-                                <select className="form-input" value={editForm.outcome} onChange={e => setEditForm({...editForm, outcome: e.target.value})}>
-                                    <option value="ongoing">Ongoing</option>
-                                    <option value="won">Won</option>
-                                    <option value="lost">Lost</option>
-                                    <option value="settled">Settled</option>
-                                    <option value="dismissed">Dismissed</option>
-                                </select>
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Case Number</label>
@@ -680,6 +655,38 @@ export default function CaseDetail() {
                             <div className="form-group">
                                 <label className="form-label">Adverse Adv. Contact</label>
                                 <input className="form-input" value={editForm.adverseAdvocateContact} onChange={e => setEditForm({...editForm, adverseAdvocateContact: e.target.value})} />
+                            </div>
+                        </div>
+
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Status</label>
+                                <select className="form-input" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
+                                    <option value="active">Active</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="done">Done</option>
+                                    <option value="urgent">Urgent</option>
+                                    <option value="closed">Closed</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Outcome</label>
+                                <select className="form-input" value={editForm.outcome} onChange={e => {
+                                    const val = e.target.value;
+                                    let newStatus = editForm.status;
+                                    if (['won', 'lost', 'settled', 'dismissed'].includes(val)) {
+                                        newStatus = 'closed';
+                                    } else if (val === 'ongoing' && newStatus === 'closed') {
+                                        newStatus = 'active';
+                                    }
+                                    setEditForm({...editForm, outcome: val, status: newStatus});
+                                }}>
+                                    <option value="ongoing">Ongoing</option>
+                                    <option value="won">Won</option>
+                                    <option value="lost">Lost</option>
+                                    <option value="settled">Settled</option>
+                                    <option value="dismissed">Dismissed</option>
+                                </select>
                             </div>
                         </div>
 

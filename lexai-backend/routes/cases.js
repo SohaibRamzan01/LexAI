@@ -149,6 +149,13 @@ router.put("/:id", async (req, res) => {
             updatedAt: new Date(),
         };
 
+        // Auto-close cases if terminal outcome is selected 
+        // OR reset to active if ongoing was selected but they tried forcing closed 
+        // without providing a terminal outcome.
+        if (['won', 'lost', 'settled', 'dismissed'].includes(updateData.outcome)) {
+            updateData.status = 'closed';
+        }
+
         // Remove undefined fields so we only update the fields provided
         Object.keys(updateData).forEach((key) => updateData[key] === undefined && delete updateData[key]);
 

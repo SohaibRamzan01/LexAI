@@ -75,7 +75,8 @@ const caseSchema = new mongoose.Schema(
         },
         onBehalfOf: {
             type: String,
-            enum: ["Plaintiff", "Defendant", "Petitioner", "Respondent", "Complainant", "Accused"],
+            enum: ["", "Plaintiff", "Defendant", "Petitioner", "Respondent", "Complainant", "Accused"],
+            default: "",
         },
         partyName: {
             type: String,

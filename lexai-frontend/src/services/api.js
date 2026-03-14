@@ -69,6 +69,7 @@ export const createCase = async (data) => {
         headers: getHeaders(),
         body: JSON.stringify(payload)
     });
+    if (!res.ok) throw new Error(await res.text());
     return res.json();
 };
 
@@ -98,6 +99,7 @@ export const updateCase = async (id, data) => {
         headers: getHeaders(),
         body: JSON.stringify(payload)
     });
+    if (!res.ok) throw new Error(await res.text());
     return res.json();
 };
 
@@ -106,6 +108,7 @@ export const deleteCase = async (id) => {
         method: "DELETE",
         headers: getHeaders()
     });
+    if (!res.ok) throw new Error(await res.text());
     return res.json();
 };
 

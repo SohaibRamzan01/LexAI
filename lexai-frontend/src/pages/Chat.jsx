@@ -48,12 +48,6 @@ const QUICK_PROMPTS = {
   ],
 }
 
-const FEE_KEYWORDS = [
-  'paid', 'payment', 'fee', 'fees', 'rupees', 'rs.', 'lakh', 'thousand',
-  'installment', 'remaining', 'balance', 'total fee', 'agreed', 'retainer',
-  'pay kar diya', 'paisa', 'raqam', 'ادا', 'فیس', 'تنخواہ', 'معاوضہ',
-]
-
 export default function Chat() {
   const navigate = useNavigate()
   const { id }   = useParams()
@@ -69,8 +63,6 @@ export default function Chat() {
   const [pendingResearch, setPendingResearch] = useState(null)
   const [error,         setError]         = useState(null)
   const [chatHistory,   setChatHistory]   = useState([])
-  const [feeDetected,   setFeeDetected]   = useState(null)
-  const [feeDismissed,  setFeeDismissed]  = useState(false)
   const [researchSaved, setResearchSaved] = useState(false)
   const [guideAvailable,setGuideAvailable] = useState(false)
   const [savingResearch,setSavingResearch] = useState(false)
@@ -86,7 +78,7 @@ export default function Chat() {
   // ── Auto scroll ────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isTyping, feeDetected, researchDetected, researchSaved])
+  }, [messages, isTyping, researchDetected, researchSaved])
 
   // ── Close lang dropdown on outside click ──────────────────
   useEffect(() => {
@@ -177,18 +169,7 @@ export default function Chat() {
     }
   }, [id, language])
 
-  // ── Fee detection ──────────────────────────────────────────
-  const detectFeeInfo = (text) => {
-    const lower = text.toLowerCase()
-    const hasFeeKeyword = FEE_KEYWORDS.some(kw => lower.includes(kw))
-    const hasAmount     = /\b\d[\d,]*\b/.test(text)
-    if (hasFeeKeyword && hasAmount) {
-      const amountMatch = text.match(/[\d,]+/)
-      const amount      = amountMatch ? amountMatch[0].replace(/,/g, '') : null
-      setFeeDetected({ text, amount })
-      setFeeDismissed(false)
-    }
-  }
+
 
   // ── Markdown-lite renderer ─────────────────────────────────
   const renderText = (text) => {
@@ -255,11 +236,11 @@ export default function Chat() {
     }
     setMessages(prev => [...prev, userMsg])
     setInput('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setIsTyping(true)
     setError(null)
 
-    // Run fee detection on every user message
-    detectFeeInfo(userText)
+
 
     try {
       // Call our secure Backend API instead of Google Gemini directly!
@@ -488,7 +469,7 @@ export default function Chat() {
         .user-avatar-msg { background: linear-gradient(135deg, #C9A84C, #A8782A); color: #0A0A0F; }
         .msg-content { max-width: 560px; }
         .msg-row.user-row .msg-content { align-items: flex-end; display: flex; flex-direction: column; }
-        .msg-bubble { padding: 13px 17px; border-radius: 14px; font-size: 13px; line-height: 1.75; }
+        .msg-bubble { padding: 13px 17px; border-radius: 14px; font-size: 13px; line-height: 1.75; white-space: pre-wrap; }
         .ai-bubble {
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
           color: #F5F0E8; border-radius: 4px 14px 14px 14px;
@@ -600,7 +581,7 @@ export default function Chat() {
         }
         .send-btn:hover { opacity: 0.9; transform: scale(1.05); }
         .send-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-        .input-hint { font-size: 10px; color: #3A3530; margin-top: 7px; text-align: center; }
+        .input-hint { font-size: 10px; color: #6B6560; font-weight: 600; margin-top: 7px; text-align: center; }
       `}</style>
 
       {/* ── SIDEBAR ── */}
@@ -752,40 +733,7 @@ export default function Chat() {
             </div>
           )}
 
-          {/* FEE DETECTION BANNER */}
-          {feeDetected && !feeDismissed && (
-            <div className="fee-banner">
-              <div className="fee-banner-left">
-                <div className="fee-banner-icon">💰</div>
-                <div>
-                  <div className="fee-banner-title">Fee Information Detected</div>
-                  <div className="fee-banner-sub">
-                    Amount mentioned:{' '}
-                    <strong>
-                      {feeDetected.amount
-                        ? `Rs. ${Number(feeDetected.amount).toLocaleString('en-PK')}`
-                        : 'amount detected'}
-                    </strong>
-                    {' '}— Would you like to update the fees record for this case?
-                  </div>
-                </div>
-              </div>
-              <div className="fee-banner-actions">
-                <button
-                  className="fee-update-btn"
-                  onClick={() => { navigate(`/case/${id}/fees`); setFeeDismissed(true) }}
-                >
-                  💰 Update Fees
-                </button>
-                <button
-                  className="fee-dismiss-btn"
-                  onClick={() => setFeeDismissed(true)}
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          )}
+
 
           {/* RESEARCH DETECTION BANNER */}
           {researchDetected && (
@@ -865,9 +813,13 @@ export default function Chat() {
               className="chat-textarea"
               placeholder={lang.placeholder}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => {
+                setInput(e.target.value)
+                e.target.style.height = 'auto'
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
+              }}
               onKeyDown={handleKeyDown}
-              rows={2}
+              rows={1}
               style={{ direction: language === 'urdu' ? 'rtl' : 'ltr' }}
             />
             <button
