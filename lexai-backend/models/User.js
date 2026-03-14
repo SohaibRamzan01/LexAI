@@ -39,6 +39,11 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
+    monthlyTargets: {
+        type: Map,
+        of: Number,
+        default: {}
+    }
 });
 
 // --------------- Pre-save hook: hash password ---------------

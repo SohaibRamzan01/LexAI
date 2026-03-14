@@ -286,6 +286,16 @@ export const getRevenueReport = async () => {
     return res.json();
 };
 
+export const updateTargetIncome = async (monthKey, amount) => {
+    const res = await fetch(`${BASE_URL}/reports/target`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ monthKey, amount })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+};
+
 export const getCasesReport = async () => {
     const res = await fetch(`${BASE_URL}/reports/cases`, {
         method: "GET",

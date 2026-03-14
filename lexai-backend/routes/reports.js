@@ -35,8 +35,10 @@ router.get("/revenue", async (req, res) => {
     try {
         const lawyerId = req.user.id;
         const Fee = require("../models/Fee");
+        const User = require("../models/User");
         
         const fees = await Fee.find({ lawyer: lawyerId }).populate("case", "title caseCode");
+        const user = await User.findById(lawyerId);
 
         let totalAgreed = 0;
         let totalReceived = 0;
@@ -50,7 +52,8 @@ router.get("/revenue", async (req, res) => {
             d.setMonth(d.getMonth() - i);
             const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             const monthName = `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`;
-            monthlyDataMap[mKey] = { month: monthName, received: 0, target: 60000, _sortKey: mKey };
+            const monthlyTarget = user?.monthlyTargets?.get(mKey) || 60000;
+            monthlyDataMap[mKey] = { month: monthName, received: 0, target: monthlyTarget, _sortKey: mKey };
         }
 
         fees.forEach(fee => {
@@ -100,7 +103,7 @@ router.get("/revenue", async (req, res) => {
         // Sort explicitly by our tracked YYYY-MM key and remove the temporary sort key
         const monthlyTrend = Object.values(monthlyDataMap)
             .sort((a, b) => a._sortKey.localeCompare(b._sortKey))
-            .map(({ _sortKey, ...rest }) => rest);
+            .map(({ _sortKey, ...rest }) => ({ ...rest, monthKey: _sortKey }));
 
         res.json({
             totalAgreed,
@@ -109,6 +112,32 @@ router.get("/revenue", async (req, res) => {
             monthlyTrend,
             perCase
         });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server Error" });
+    }
+});
+
+// 2.5 POST /api/reports/target - Update the target income for a specific month
+router.post("/target", async (req, res) => {
+    try {
+        const lawyerId = req.user.id;
+        const { monthKey, amount } = req.body;
+        if (!monthKey || amount === undefined) {
+            return res.status(400).json({ error: "Missing monthKey or amount" });
+        }
+        
+        const User = require("../models/User");
+        const user = await User.findById(lawyerId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        if (!user.monthlyTargets) {
+            user.monthlyTargets = new Map();
+        }
+        user.monthlyTargets.set(monthKey, amount);
+        await user.save();
+        
+        res.json({ message: "Target updated successfully", monthlyTargets: user.monthlyTargets });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Server Error" });
@@ -177,7 +206,7 @@ router.get("/cases", async (req, res) => {
 
         const byMonth = Object.values(monthlyDataMap)
             .sort((a, b) => a._sortKey.localeCompare(b._sortKey))
-            .map(({ _sortKey, ...rest }) => rest);
+            .map(({ _sortKey, ...rest }) => ({ ...rest, monthKey: _sortKey }));
 
         res.json({ byType, byCourt, byStatus, byMonth });
     } catch (err) {
@@ -336,7 +365,7 @@ router.get("/research", async (req, res) => {
 
         const researchByMonth = Object.values(monthlyDataMap)
             .sort((a, b) => a._sortKey.localeCompare(b._sortKey))
-            .map(({ _sortKey, ...rest }) => rest);
+            .map(({ _sortKey, ...rest }) => ({ ...rest, monthKey: _sortKey }));
 
         res.json({
             totalResearchGenerated,

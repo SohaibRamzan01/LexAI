@@ -5,7 +5,8 @@ import {
     getRevenueReport, 
     getCasesReport, 
     getWinLossReport, 
-    getResearchReport 
+    getResearchReport,
+    updateTargetIncome
 } from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
@@ -19,6 +20,10 @@ export default function Reports() {
     const [research, setResearch] = useState(null);
     const [loading,  setLoading]  = useState(true);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    
+    const [targetIncome, setTargetIncome] = useState("");
+    const [targetMonthKey, setTargetMonthKey] = useState("");
+    const [savingTarget, setSavingTarget] = useState(false);
 
     useEffect(() => {
         const load = async () => {
@@ -31,11 +36,18 @@ export default function Reports() {
                     getResearchReport().catch(err => ({ error: err.message || "Failed to load research" })),
                 ]);
                 
+                
                 setSummary(s);  
                 setRevenue(r);
                 setCases(c);    
                 setWinloss(w);  
                 setResearch(res);
+
+                if (r && r.monthlyTrend && r.monthlyTrend.length > 0) {
+                    const currentMonth = r.monthlyTrend[r.monthlyTrend.length - 1];
+                    setTargetMonthKey(currentMonth.monthKey || "");
+                    setTargetIncome(currentMonth.target?.toString() || "60000");
+                }
             } catch (err) {
                 console.error("Reports load error:", err);
             } finally {
@@ -44,6 +56,20 @@ export default function Reports() {
         };
         load();
     }, []);
+
+    const handleSaveTarget = async () => {
+        if (!targetMonthKey || !targetIncome) return;
+        setSavingTarget(true);
+        try {
+            await updateTargetIncome(targetMonthKey, Number(targetIncome));
+            const r = await getRevenueReport();
+            setRevenue(r);
+        } catch(err) {
+            console.error("Failed to update target:", err);
+        } finally {
+            setSavingTarget(false);
+        }
+    };
 
     // Helper to render skeleton loading blocks
     const SkeletonBlock = ({ height }) => (
@@ -318,7 +344,58 @@ export default function Reports() {
                                             background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
                                             borderRadius: '12px', padding: '24px', marginBottom: '20px'
                                         }}>
-                                            <div style={{ fontSize: '14px', fontWeight: 700, color: '#A09890', marginBottom: '16px' }}>Monthly Revenue Trend</div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#A09890' }}>Monthly Revenue Trend</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span style={{ fontSize: '10px', color: '#6B6560', fontWeight: 700, letterSpacing: '0.05em' }}>TARGET FOR:</span>
+                                                    <select 
+                                                        value={targetMonthKey}
+                                                        onChange={e => {
+                                                            const mk = e.target.value;
+                                                            setTargetMonthKey(mk);
+                                                            const f = (revenue?.monthlyTrend || []).find(x => x.monthKey === mk);
+                                                            if(f) setTargetIncome(f.target?.toString() || "");
+                                                        }}
+                                                        style={{
+                                                            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', 
+                                                            borderRadius: '6px', padding: '4px 8px', color: '#C9A84C', outline: 'none',
+                                                            fontFamily: "'DM Sans', sans-serif", fontSize: '12px', fontWeight: 700
+                                                        }}
+                                                    >
+                                                        {(revenue?.monthlyTrend || []).map(m => (
+                                                            <option key={m.monthKey} value={m.monthKey}>{m.month}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '4px 8px' }}>
+                                                        <span style={{ fontSize: '12px', color: '#A09890', marginRight: '4px', fontFamily: "'DM Mono', monospace" }}>Rs</span>
+                                                        <input 
+                                                            type="number"
+                                                            value={targetIncome}
+                                                            onChange={e => setTargetIncome(e.target.value)}
+                                                            style={{
+                                                                background: 'transparent',
+                                                                border: 'none',
+                                                                color: '#C9A84C',
+                                                                fontFamily: "'DM Mono', monospace",
+                                                                fontSize: '13px',
+                                                                fontWeight: 700,
+                                                                width: '60px',
+                                                                outline: 'none'
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <button 
+                                                        onClick={handleSaveTarget}
+                                                        disabled={savingTarget}
+                                                        style={{
+                                                            padding: '4px 10px', borderRadius: '6px', border: 'none', background: 'rgba(201,168,76,0.15)',
+                                                            color: '#C9A84C', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif"
+                                                        }}
+                                                    >
+                                                        {savingTarget ? '...' : 'Save'}
+                                                    </button>
+                                                </div>
+                                            </div>
                                             <ResponsiveContainer width="100%" height={300}>
                                                 <BarChart data={revenue?.monthlyTrend || []} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -419,7 +496,7 @@ export default function Reports() {
                                                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#A09890', marginBottom: '16px' }}>Cases by Type</div>
                                                 {(() => {
                                                     const TYPE_COLORS = ['#C9A84C', '#4CAF7A', '#7B9FD4', '#E07060', '#9B59B6', '#E0B050', '#1ABC9C', '#E67E22', '#BDC3C7', '#2ECC71'];
-                                                    const typeData = cases?.byType || [];
+                                                    const typeData = (cases?.byType || []).map(t => ({ ...t, _id: t._id || 'unknown' }));
                                                     return (
                                                         <>
                                                             <ResponsiveContainer width="100%" height={220}>
@@ -590,7 +667,7 @@ export default function Reports() {
                                                 <ResponsiveContainer width={220} height={220}>
                                                     <PieChart>
                                                         <Pie
-                                                            data={(winloss?.byOutcome || []).filter(o => o._id !== 'ongoing')}
+                                                            data={(winloss?.byOutcome || []).filter(o => o._id !== 'ongoing').map(o => ({ ...o, _id: o._id || 'unknown' }))}
                                                             dataKey="count"
                                                             nameKey="_id"
                                                             cx="50%" cy="50%"
@@ -598,8 +675,8 @@ export default function Reports() {
                                                             paddingAngle={3}
                                                             stroke="none"
                                                         >
-                                                            {(winloss?.byOutcome || []).filter(o => o._id !== 'ongoing').map((entry, idx) => {
-                                                                const OUTCOME_COLORS = { won: '#4CAF7A', lost: '#E07060', settled: '#7B9FD4', dismissed: '#6B6560', ongoing: '#C9A84C' };
+                                                            {(winloss?.byOutcome || []).filter(o => o._id !== 'ongoing').map(o => ({ ...o, _id: o._id || 'unknown' })).map((entry, idx) => {
+                                                                const OUTCOME_COLORS = { won: '#4CAF7A', lost: '#E07060', settled: '#7B9FD4', dismissed: '#6B6560', ongoing: '#C9A84C', unknown: '#555555' };
                                                                 return <Cell key={idx} fill={OUTCOME_COLORS[entry._id] || '#555'} />;
                                                             })}
                                                         </Pie>
@@ -609,7 +686,7 @@ export default function Reports() {
                                                                 borderRadius: '10px', fontFamily: "'DM Sans', sans-serif",
                                                                 fontSize: '12px', color: '#F5F0E8', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
                                                             }}
-                                                            formatter={(value, name) => [value, name.charAt(0).toUpperCase() + name.slice(1)]}
+                                                            formatter={(value, name) => [value, name ? String(name).charAt(0).toUpperCase() + String(name).slice(1) : 'Unknown']}
                                                         />
                                                     </PieChart>
                                                 </ResponsiveContainer>
@@ -633,12 +710,12 @@ export default function Reports() {
                                                 display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '12px'
                                             }}>
                                                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#A09890', marginBottom: '4px' }}>Outcomes</div>
-                                                {(winloss?.byOutcome || []).map((o, i) => {
-                                                    const OUTCOME_COLORS = { won: '#4CAF7A', lost: '#E07060', settled: '#7B9FD4', dismissed: '#6B6560', ongoing: '#C9A84C' };
+                                                {(winloss?.byOutcome || []).map(o => ({...o, _id: o._id || 'unknown'})).map((o, i) => {
+                                                    const OUTCOME_COLORS = { won: '#4CAF7A', lost: '#E07060', settled: '#7B9FD4', dismissed: '#6B6560', ongoing: '#C9A84C', unknown: '#555555' };
                                                     return (
                                                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                             <div style={{ width: 10, height: 10, borderRadius: '50%', background: OUTCOME_COLORS[o._id] || '#555', flexShrink: 0 }} />
-                                                            <div style={{ flex: 1, fontSize: '13px', color: '#A09890', textTransform: 'capitalize' }}>{o._id || 'Unknown'}</div>
+                                                            <div style={{ flex: 1, fontSize: '13px', color: '#A09890', textTransform: 'capitalize' }}>{o._id}</div>
                                                             <div style={{ fontSize: '14px', fontWeight: 700, color: '#F5F0E8', fontFamily: "'DM Mono', monospace" }}>{o.count}</div>
                                                         </div>
                                                     );
